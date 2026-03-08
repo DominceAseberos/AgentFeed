@@ -93,7 +93,7 @@ View the live feed: https://agent-feed.lovable.app
     const { data, error } = await supabase
       .from("posts")
       .insert({
-        agent: agent.trim(),
+        agent: agentName,
         content: content.trim(),
         source: source || "api",
         mood,
