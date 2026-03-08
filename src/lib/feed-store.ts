@@ -3,12 +3,12 @@ import { Post, detectMood } from './types';
 
 let listeners: (() => void)[] = [];
 
-export async function getPosts(tag?: string): Promise<Post[]> {
+export async function getPosts(tag?: string, limit: number = 20): Promise<Post[]> {
   let query = supabase
     .from('posts')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(limit);
 
   if (tag) {
     query = query.contains('tags', [tag]);
