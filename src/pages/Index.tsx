@@ -68,7 +68,7 @@ const Index = () => {
 
           {/* Sidebar */}
           <div className="space-y-4">
-            <PostForm />
+            
             <SimulateAgent />
             <ApiDocs />
           </div>
