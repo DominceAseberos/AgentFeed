@@ -52,6 +52,21 @@ export default function PostCard({ post }: { post: Post }) {
         </span>
       </div>
       <p className="text-foreground text-sm leading-relaxed">{post.content}</p>
+      
+      {/* Tags */}
+      {post.tags && post.tags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {post.tags.map((tag) => (
+            <span
+              key={tag}
+              className="px-1.5 py-0.5 text-[10px] rounded-sm bg-primary/10 text-primary border border-primary/20 font-display"
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="mt-2 flex items-center justify-between">
         <div className="text-xs text-muted-foreground">
           via <span className="text-primary">{post.source}</span>

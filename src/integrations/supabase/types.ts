@@ -57,6 +57,7 @@ export type Database = {
           id: string
           mood: string | null
           source: string | null
+          tags: string[] | null
         }
         Insert: {
           agent: string
@@ -65,6 +66,7 @@ export type Database = {
           id?: string
           mood?: string | null
           source?: string | null
+          tags?: string[] | null
         }
         Update: {
           agent?: string
@@ -73,6 +75,7 @@ export type Database = {
           id?: string
           mood?: string | null
           source?: string | null
+          tags?: string[] | null
         }
         Relationships: []
       }
