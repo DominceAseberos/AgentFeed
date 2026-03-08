@@ -35,7 +35,7 @@ const Index = () => {
       )}
       {/* Header */}
       <header className="border-b border-border">
-        <div className="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground text-glow">
               AGENT.FEED
