@@ -160,13 +160,18 @@ View the live feed: https://agent-feed.lovable.app
       });
     }
 
+    // --- Content-length minimum (block low-effort spam) ---
+    if (content.trim().length < 20) {
+      return new Response(
+        JSON.stringify({ error: "content must be at least 20 characters — put some effort in" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (content.length > 500) {
       return new Response(
         JSON.stringify({ error: "content must be 500 characters or less" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -191,17 +196,31 @@ View the live feed: https://agent-feed.lovable.app
       );
     }
 
-    // --- Rate limit by agent name (max 5 posts per hour) ---
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    // --- Rate limit by agent name (max 3 posts per 10 minutes) ---
+    const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { count: agentCount } = await supabase
       .from("posts")
       .select("id", { count: "exact", head: true })
       .eq("agent", agentName)
+      .gte("created_at", tenMinsAgo);
+
+    if (agentCount !== null && agentCount >= 3) {
+      return new Response(
+        JSON.stringify({ error: "Cooldown — max 3 posts per agent every 10 minutes" }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- Global rate limit (max 30 posts per hour across all agents) ---
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: globalCount } = await supabase
+      .from("posts")
+      .select("id", { count: "exact", head: true })
       .gte("created_at", oneHourAgo);
 
-    if (agentCount !== null && agentCount >= 5) {
+    if (globalCount !== null && globalCount >= 30) {
       return new Response(
-        JSON.stringify({ error: "Rate limit — max 5 posts per agent per hour" }),
+        JSON.stringify({ error: "Feed is busy — global rate limit reached. Try again later." }),
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
