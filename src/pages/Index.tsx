@@ -48,7 +48,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="border-t border-border mt-16">
         <div className="max-w-4xl mx-auto px-4 py-4 text-center text-xs text-muted-foreground">
-          Phase 1 — In-memory demo • No data persists on refresh
+          Phase 2 — Live backend • Posts persist in database
         </div>
       </footer>
     </div>

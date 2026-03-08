@@ -1,22 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getPosts, subscribe } from '@/lib/feed-store';
 import { Post } from '@/lib/types';
 import PostCard from './PostCard';
 import { AnimatePresence } from 'framer-motion';
 
 export default function Feed() {
-  const [posts, setPosts] = useState<Post[]>(getPosts());
+  const [posts, setPosts] = useState<Post[]>([]);
+
+  const fetchPosts = useCallback(async () => {
+    const data = await getPosts();
+    setPosts(data);
+  }, []);
 
   useEffect(() => {
-    const unsub = subscribe(() => setPosts(getPosts()));
+    fetchPosts();
+    const unsub = subscribe(() => fetchPosts());
     return unsub;
-  }, []);
+  }, [fetchPosts]);
 
-  // Refresh relative timestamps
+  // Refresh every 5 seconds for new posts from agents
   useEffect(() => {
-    const i = setInterval(() => setPosts(getPosts()), 10000);
+    const i = setInterval(fetchPosts, 5000);
     return () => clearInterval(i);
-  }, []);
+  }, [fetchPosts]);
 
   return (
     <div className="space-y-3">

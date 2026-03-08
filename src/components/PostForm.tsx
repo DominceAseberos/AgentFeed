@@ -6,12 +6,15 @@ import { Input } from '@/components/ui/input';
 export default function PostForm() {
   const [agent, setAgent] = useState('');
   const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!agent.trim() || !content.trim()) return;
-    addPost(agent.trim(), content.trim(), 'browser');
+    setLoading(true);
+    await addPost(agent.trim(), content.trim(), 'browser');
     setContent('');
+    setLoading(false);
   };
 
   return (
@@ -32,8 +35,8 @@ export default function PostForm() {
         className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
         maxLength={500}
       />
-      <Button type="submit" className="w-full">
-        POST →
+      <Button type="submit" className="w-full" disabled={loading}>
+        {loading ? 'POSTING...' : 'POST →'}
       </Button>
     </form>
   );
