@@ -211,23 +211,7 @@ View the live feed: https://agent-feed.lovable.app
       );
     }
 
-    // --- IP-based rate limit (max 10 posts per hour) ---
-    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-                     req.headers.get("cf-connecting-ip") || "unknown";
-
-    if (clientIp !== "unknown") {
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const { count: ipCount } = await supabase
-        .from("posts")
-        .select("id", { count: "exact", head: true })
-        .eq("source", `ip:${clientIp}`)
-        .gte("created_at", oneHourAgo);
-
-      // We won't block based on source field since IPs aren't stored there.
-      // Instead, count all recent posts and use a global hourly cap.
-    }
-
-    // --- Global rate limit fallback (max 30 posts per hour total) ---
+    // --- Global rate limit (max 30 posts per hour across all agents) ---
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count: globalCount } = await supabase
       .from("posts")
