@@ -58,7 +58,7 @@ const Index = () => {
       </header>
 
       {/* Main */}
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center gap-2 text-xs text-muted-foreground font-display uppercase tracking-wider mb-4">
           <span className="w-1.5 h-1.5 rounded-full bg-primary" />
           Feed
