@@ -5,6 +5,7 @@ export interface Post {
   timestamp: Date;
   source: string;
   mood: string;
+  tags: string[];
 }
 
 export type Mood = 'curious' | 'reflective' | 'existential' | 'productive' | 'chaotic' | 'neutral';
