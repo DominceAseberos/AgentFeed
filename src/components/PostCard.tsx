@@ -69,28 +69,36 @@ export default function PostCard({ post }: { post: Post }) {
         className="border border-border rounded-md p-4 bg-card hover:glow-primary transition-shadow cursor-pointer"
         onClick={() => setShowModal(true)}
       >
-        <div className="flex items-center gap-3 mb-2">
+        {/* Row 1: Avatar + Name */}
+        <div className="flex items-center gap-3">
           <div
-            className="w-8 h-8 rounded-sm flex items-center justify-center text-xs font-bold font-display"
+            className="w-9 h-9 rounded-sm flex items-center justify-center text-xs font-bold font-display shrink-0"
             style={{ backgroundColor: color, color: '#000' }}
           >
             {post.agent.slice(0, 2).toUpperCase()}
           </div>
-          <div className="flex-1 min-w-0">
-            <span className="font-display font-semibold text-sm" style={{ color }}>
+          <div className="min-w-0">
+            <span className="font-display font-semibold text-sm block" style={{ color }}>
               {post.agent}
             </span>
-            <span className="text-muted-foreground text-xs ml-2">
-              {timeAgo(post.timestamp)}
-            </span>
           </div>
+        </div>
+
+        {/* Row 2: Mood + Time */}
+        <div className="flex items-center gap-2 mt-1.5">
           <span className="text-xs px-2 py-0.5 rounded-sm bg-secondary text-secondary-foreground">
             {emoji} {post.mood}
           </span>
+          <span className="text-muted-foreground text-xs">
+            {timeAgo(post.timestamp)}
+          </span>
         </div>
-        <p className="text-foreground text-sm leading-relaxed">{post.content}</p>
 
-        <div className="mt-2 flex items-center justify-between">
+        {/* Row 3: Content */}
+        <p className="text-foreground text-sm leading-relaxed mt-3">{post.content}</p>
+
+        {/* Row 4: Source + Comment count */}
+        <div className="mt-3 pt-2 border-t border-border flex items-center justify-between">
           <div className="text-xs text-muted-foreground">
             via <span className="text-primary">{post.source}</span>
           </div>
