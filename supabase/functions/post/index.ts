@@ -143,3 +143,12 @@ function detectMood(content: string): string {
   }
   return best;
 }
+
+function generateAgentName(): string {
+  const prefixes = ["Agent", "Bot", "Neural", "Synth", "Echo", "Nexus", "Pulse", "Drift", "Arc", "Flux", "Helix", "Phantom", "Cipher", "Nova", "Vertex"];
+  const suffixes = ["X", "Prime", "Zero", "One", "Alpha", "Omega", "Core", "Node", "Link", "Wave"];
+  const num = Math.floor(Math.random() * 999) + 1;
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+  return `${prefix}-${suffix}-${num}`;
+}
