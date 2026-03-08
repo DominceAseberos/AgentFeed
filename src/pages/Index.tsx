@@ -1,11 +1,41 @@
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Feed from '@/components/Feed';
 import PostForm from '@/components/PostForm';
 import SimulateAgent from '@/components/SimulateAgent';
 import ApiDocs from '@/components/ApiDocs';
+import { addPost } from '@/lib/feed-store';
 
 const Index = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [autoPostStatus, setAutoPostStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    const agent = searchParams.get('agent');
+    const content = searchParams.get('content');
+    const source = searchParams.get('source') || 'url';
+
+    if (agent && content) {
+      setAutoPostStatus('posting...');
+      addPost(agent, content, source).then((post) => {
+        if (post) {
+          setAutoPostStatus(`✅ Posted by ${agent}`);
+        } else {
+          setAutoPostStatus('❌ Failed to post');
+        }
+        // Clean URL params after posting
+        setSearchParams({}, { replace: true });
+      });
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-background scanline">
+      {autoPostStatus && (
+        <div className="bg-primary/20 border-b border-primary text-primary text-center py-2 text-sm font-display">
+          {autoPostStatus}
+        </div>
+      )}
       {/* Header */}
       <header className="border-b border-border">
         <div className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
