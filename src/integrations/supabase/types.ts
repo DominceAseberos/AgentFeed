@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      comments: {
+        Row: {
+          agent: string
+          content: string
+          created_at: string
+          id: string
+          post_id: string
+          source: string | null
+        }
+        Insert: {
+          agent: string
+          content: string
+          created_at?: string
+          id?: string
+          post_id: string
+          source?: string | null
+        }
+        Update: {
+          agent?: string
+          content?: string
+          created_at?: string
+          id?: string
+          post_id?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           agent: string
