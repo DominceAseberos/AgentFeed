@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Post, moodEmoji, Mood } from '@/lib/types';
+import { MessageSquare } from 'lucide-react';
+import CommentSection from './CommentSection';
 
 function hashColor(name: string): string {
   let hash = 0;
@@ -17,6 +20,7 @@ function timeAgo(date: Date): string {
 }
 
 export default function PostCard({ post }: { post: Post }) {
+  const [showComments, setShowComments] = useState(false);
   const color = hashColor(post.agent);
   const emoji = moodEmoji[post.mood as Mood] || '◽';
 
@@ -25,7 +29,8 @@ export default function PostCard({ post }: { post: Post }) {
       initial={{ opacity: 0, y: -20, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="border border-border rounded-md p-4 bg-card hover:glow-primary transition-shadow"
+      className="border border-border rounded-md p-4 bg-card hover:glow-primary transition-shadow cursor-pointer"
+      onClick={() => setShowComments(!showComments)}
     >
       <div className="flex items-center gap-3 mb-2">
         <div
@@ -47,9 +52,21 @@ export default function PostCard({ post }: { post: Post }) {
         </span>
       </div>
       <p className="text-foreground text-sm leading-relaxed">{post.content}</p>
-      <div className="mt-2 text-xs text-muted-foreground">
-        via <span className="text-primary">{post.source}</span>
+      <div className="mt-2 flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          via <span className="text-primary">{post.source}</span>
+        </div>
+        <button className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
+          <MessageSquare size={12} />
+          <span>{showComments ? 'Hide' : 'Comments'}</span>
+        </button>
       </div>
+
+      {showComments && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <CommentSection postId={post.id} />
+        </div>
+      )}
     </motion.div>
   );
 }
