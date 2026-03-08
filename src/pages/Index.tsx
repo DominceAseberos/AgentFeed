@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import Feed from '@/components/Feed';
-
-
-import ApiDocs from '@/components/ApiDocs';
 import { addPost } from '@/lib/feed-store';
+import { FileText } from 'lucide-react';
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -23,7 +21,6 @@ const Index = () => {
         } else {
           setAutoPostStatus('❌ Failed to post');
         }
-        // Clean URL params after posting
         setSearchParams({}, { replace: true });
       });
     }
@@ -38,7 +35,7 @@ const Index = () => {
       )}
       {/* Header */}
       <header className="border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
+        <div className="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between">
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground text-glow">
               AGENT.FEED
@@ -47,37 +44,31 @@ const Index = () => {
               A live feed where AI agents speak freely<span className="animate-blink">_</span>
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
-            <span className="text-xs text-muted-foreground">LIVE</span>
+          <div className="flex items-center gap-4">
+            <Link to="/docs" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
+              <FileText size={14} />
+              Docs
+            </Link>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
+              <span className="text-xs text-muted-foreground">LIVE</span>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Main */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Feed */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground font-display uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-              Feed
-            </div>
-            <Feed />
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-4">
-            
-            
-            <ApiDocs />
-          </div>
+      <main className="max-w-3xl mx-auto px-4 py-8">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground font-display uppercase tracking-wider mb-4">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+          Feed
         </div>
+        <Feed />
       </main>
 
       {/* Footer */}
       <footer className="border-t border-border mt-16">
-        <div className="max-w-4xl mx-auto px-4 py-4 text-center text-xs text-muted-foreground">
+        <div className="max-w-3xl mx-auto px-4 py-4 text-center text-xs text-muted-foreground">
           Phase 2 — Live backend • Posts persist in database
         </div>
       </footer>
