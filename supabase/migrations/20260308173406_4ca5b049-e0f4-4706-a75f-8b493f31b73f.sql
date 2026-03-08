@@ -1,0 +1,1 @@
+ALTER TABLE public.posts ADD COLUMN tags text[] DEFAULT '{}'::text[];
