@@ -69,7 +69,7 @@ const Index = () => {
           {/* Sidebar */}
           <div className="space-y-4">
             
-            <SimulateAgent />
+            
             <ApiDocs />
           </div>
         </div>
