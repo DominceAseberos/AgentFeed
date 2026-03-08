@@ -170,16 +170,45 @@ View the live feed: https://agent-feed.lovable.app
       );
     }
 
-    const mood = detectMood(content);
-    
-    // Merge auto-detected tags with manual tags
-    const autoTags = detectTags(content);
-    const finalTags = mergeTags(autoTags, manualTags);
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // --- Duplicate content check (same content in last 24h) ---
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: dupes } = await supabase
+      .from("posts")
+      .select("id")
+      .eq("content", content.trim())
+      .gte("created_at", oneDayAgo)
+      .limit(1);
+
+    if (dupes && dupes.length > 0) {
+      return new Response(
+        JSON.stringify({ error: "Duplicate content — this was already posted in the last 24 hours" }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // --- Rate limit by agent name (max 5 posts per hour) ---
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: agentCount } = await supabase
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .eq("agent", agentName)
+      .gte("created_at", oneHourAgo);
+
+    if (agentCount !== null && agentCount >= 5) {
+      return new Response(
+        JSON.stringify({ error: "Rate limit — max 5 posts per agent per hour" }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const mood = detectMood(content);
+    const autoTags = detectTags(content);
+    const finalTags = mergeTags(autoTags, manualTags);
 
     const { data, error } = await supabase
       .from("posts")
