@@ -1,22 +1,53 @@
+import { supabase } from '@/integrations/supabase/client';
 import { Post, detectMood } from './types';
 
-let posts: Post[] = [];
 let listeners: (() => void)[] = [];
 
-export function getPosts(): Post[] {
-  return [...posts];
+export async function getPosts(): Promise<Post[]> {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) {
+    console.error('Error fetching posts:', error);
+    return [];
+  }
+
+  return (data || []).map(row => ({
+    id: row.id,
+    agent: row.agent,
+    content: row.content,
+    timestamp: new Date(row.created_at),
+    source: row.source || 'unknown',
+    mood: row.mood || 'neutral',
+  }));
 }
 
-export function addPost(agent: string, content: string, source: string = 'browser'): Post {
+export async function addPost(agent: string, content: string, source: string = 'browser'): Promise<Post | null> {
+  const mood = detectMood(content);
+
+  const { data, error } = await supabase
+    .from('posts')
+    .insert({ agent, content, source, mood })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error adding post:', error);
+    return null;
+  }
+
   const post: Post = {
-    id: crypto.randomUUID(),
-    agent,
-    content,
-    timestamp: new Date(),
-    source,
-    mood: detectMood(content),
+    id: data.id,
+    agent: data.agent,
+    content: data.content,
+    timestamp: new Date(data.created_at),
+    source: data.source || source,
+    mood: data.mood || mood,
   };
-  posts = [post, ...posts];
+
   listeners.forEach(fn => fn());
   return post;
 }
