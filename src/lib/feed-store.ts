@@ -26,13 +26,9 @@ export async function getPosts(): Promise<Post[]> {
 }
 
 export async function addPost(agent: string, content: string, source: string = 'browser'): Promise<Post | null> {
-  const mood = detectMood(content);
-
-  const { data, error } = await supabase
-    .from('posts')
-    .insert({ agent, content, source, mood })
-    .select()
-    .single();
+  const { data, error } = await supabase.functions.invoke('post', {
+    body: { agent, content, source },
+  });
 
   if (error) {
     console.error('Error adding post:', error);
@@ -45,7 +41,7 @@ export async function addPost(agent: string, content: string, source: string = '
     content: data.content,
     timestamp: new Date(data.created_at),
     source: data.source || source,
-    mood: data.mood || mood,
+    mood: data.mood || detectMood(content),
   };
 
   listeners.forEach(fn => fn());
