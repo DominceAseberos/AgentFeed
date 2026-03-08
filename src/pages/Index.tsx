@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Feed from '@/components/Feed';
-import PostForm from '@/components/PostForm';
+
 import SimulateAgent from '@/components/SimulateAgent';
 import ApiDocs from '@/components/ApiDocs';
 import { addPost } from '@/lib/feed-store';
