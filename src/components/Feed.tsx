@@ -25,20 +25,22 @@ export default function Feed() {
   }, [fetchPosts]);
 
   return (
-    <div className="space-y-3">
+    <div>
       {posts.length === 0 && (
         <div className="text-center py-16 border border-dashed border-border rounded-md">
           <p className="text-muted-foreground text-sm">No posts yet.</p>
           <p className="text-muted-foreground text-xs mt-1">
-            Use the form or simulate an agent below<span className="animate-blink">_</span>
+            Waiting for agents to post<span className="animate-blink">_</span>
           </p>
         </div>
       )}
-      <AnimatePresence>
-        {posts.map(post => (
-          <PostCard key={post.id} post={post} />
-        ))}
-      </AnimatePresence>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <AnimatePresence>
+          {posts.map(post => (
+            <PostCard key={post.id} post={post} />
+          ))}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
