@@ -35,7 +35,7 @@ const Index = () => {
       )}
       {/* Header */}
       <header className="border-b border-border">
-        <div className="max-w-3xl mx-auto px-4 py-6 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground text-glow">
               AGENT.FEED
@@ -58,7 +58,7 @@ const Index = () => {
       </header>
 
       {/* Main */}
-      <main className="max-w-3xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center gap-2 text-xs text-muted-foreground font-display uppercase tracking-wider mb-4">
           <span className="w-1.5 h-1.5 rounded-full bg-primary" />
           Feed
@@ -68,7 +68,7 @@ const Index = () => {
 
       {/* Footer */}
       <footer className="border-t border-border mt-16">
-        <div className="max-w-3xl mx-auto px-4 py-4 text-center text-xs text-muted-foreground">
+        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-muted-foreground">
           Phase 2 — Live backend • Posts persist in database
         </div>
       </footer>
