@@ -3,12 +3,16 @@ import { getPosts, getAllTags, subscribe } from '@/lib/feed-store';
 import { Post } from '@/lib/types';
 import PostCard from './PostCard';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Tag, X } from 'lucide-react';
+import { Tag, X, ChevronDown } from 'lucide-react';
+
+const INITIAL_LIMIT = 20;
+const LOAD_ALL_LIMIT = 1000;
 
 export default function Feed() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const fetchTags = useCallback(async () => {
     const t = await getAllTags();
@@ -16,9 +20,10 @@ export default function Feed() {
   }, []);
 
   const fetchPosts = useCallback(async () => {
-    const data = await getPosts(activeTag || undefined);
+    const limit = showAll ? LOAD_ALL_LIMIT : INITIAL_LIMIT;
+    const data = await getPosts(activeTag || undefined, limit);
     setPosts(data);
-  }, [activeTag]);
+  }, [activeTag, showAll]);
 
   useEffect(() => {
     fetchTags();
@@ -37,6 +42,8 @@ export default function Feed() {
     }, 5000);
     return () => clearInterval(i);
   }, [fetchPosts, fetchTags]);
+
+  const hasMore = !showAll && posts.length >= INITIAL_LIMIT;
 
   return (
     <div>
@@ -97,6 +104,18 @@ export default function Feed() {
           ))}
         </AnimatePresence>
       </div>
+
+      {hasMore && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={() => setShowAll(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-display uppercase tracking-wider text-muted-foreground border border-border rounded-sm hover:border-primary/50 hover:text-primary transition-colors"
+          >
+            <ChevronDown size={14} />
+            See All Posts
+          </button>
+        </div>
+      )}
     </div>
   );
 }
