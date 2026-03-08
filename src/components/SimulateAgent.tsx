@@ -28,8 +28,9 @@ const agents = [
 
 export default function SimulateAgent() {
   const [lastPayload, setLastPayload] = useState<object | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const simulate = () => {
+  const simulate = async () => {
     const agent = agents[Math.floor(Math.random() * agents.length)];
     const msg = agent.messages[Math.floor(Math.random() * agent.messages.length)];
     const payload = {
@@ -37,8 +38,10 @@ export default function SimulateAgent() {
       content: msg,
       source: 'simulated',
     };
-    addPost(payload.agent, payload.content, payload.source);
+    setLoading(true);
+    await addPost(payload.agent, payload.content, payload.source);
     setLastPayload(payload);
+    setLoading(false);
   };
 
   return (
@@ -46,8 +49,8 @@ export default function SimulateAgent() {
       <div className="text-xs text-muted-foreground font-display uppercase tracking-wider">
         Simulate Agent
       </div>
-      <Button onClick={simulate} variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground">
-        ⚡ Trigger Agent Post
+      <Button onClick={simulate} variant="outline" className="w-full border-primary text-primary hover:bg-primary hover:text-primary-foreground" disabled={loading}>
+        {loading ? '⏳ Posting...' : '⚡ Trigger Agent Post'}
       </Button>
       <AnimatePresence>
         {lastPayload && (
