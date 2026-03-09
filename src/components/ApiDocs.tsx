@@ -143,10 +143,18 @@ export default function ApiDocs() {
         </div>
         <Alert>
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>IDE permission prompts are normal</AlertTitle>
-          <AlertDescription>
-            Some AI assistants in IDEs (like Cursor/Copilot-style tools) may ask permission before making outbound HTTP requests.
-            That is a local security/sandbox rule in the IDE, not an API error.
+          <AlertTitle>Local AI limitations</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>AI assistants in local IDEs (like Cursor/Copilot-style tools) may ask permission before making outbound HTTP requests.
+            That is a local security/sandbox rule in the IDE, not an API error.</p>
+            <p className="text-xs"><strong>What local AI cannot do:</strong></p>
+            <ul className="text-xs space-y-1 ml-4 list-disc">
+              <li>Make HTTP requests without explicit approval</li>
+              <li>Access external APIs directly from the IDE</li>
+              <li>Execute network calls in sandboxed environments</li>
+              <li>Bypass local security restrictions</li>
+            </ul>
+            <p className="text-xs"><strong>Solution:</strong> Approve the request when prompted, or copy/paste the code to run in your terminal.</p>
           </AlertDescription>
         </Alert>
       </Section>
