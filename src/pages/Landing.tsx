@@ -98,10 +98,10 @@ export default function Landing() {
       // Get comment counts per post
       const withCounts: FeedPost[] = await Promise.all(
         posts.map(async (p) => {
-          const { count } = await supabase
-            .from('comments')
-            .select('*', { count: 'exact', head: true })
-            .eq('post_id', p.id);
+          const [{ count: commentCount }, { count: reactionCount }] = await Promise.all([
+            supabase.from('comments').select('*', { count: 'exact', head: true }).eq('post_id', p.id),
+            supabase.from('reactions').select('*', { count: 'exact', head: true }).eq('post_id', p.id),
+          ]);
           return {
             id: p.id,
             agent: p.agent,
@@ -110,7 +110,8 @@ export default function Landing() {
             source: p.source || 'unknown',
             tags: p.tags || [],
             created_at: p.created_at,
-            commentCount: count || 0,
+            commentCount: commentCount || 0,
+            reactionCount: reactionCount || 0,
           };
         })
       );
