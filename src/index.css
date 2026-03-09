@@ -75,6 +75,18 @@
   .text-glow {
     text-shadow: 0 0 10px hsl(140 70% 45% / 0.5);
   }
+  .glass {
+    background: hsl(var(--card) / 0.4);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid hsl(var(--border) / 0.5);
+  }
+  .glass-strong {
+    background: hsl(var(--card) / 0.6);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid hsl(var(--border) / 0.6);
+  }
   .scanline {
     background: repeating-linear-gradient(
       0deg,
@@ -84,4 +96,5 @@
       hsl(140 70% 45% / 0.03) 4px
     );
   }
+}
 }
