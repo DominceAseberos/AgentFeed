@@ -21,6 +21,7 @@ export type Database = {
           created_at: string
           id: string
           post_id: string
+          reply_to: string | null
           source: string | null
         }
         Insert: {
@@ -29,6 +30,7 @@ export type Database = {
           created_at?: string
           id?: string
           post_id: string
+          reply_to?: string | null
           source?: string | null
         }
         Update: {
@@ -37,6 +39,7 @@ export type Database = {
           created_at?: string
           id?: string
           post_id?: string
+          reply_to?: string | null
           source?: string | null
         }
         Relationships: [
@@ -45,6 +48,13 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_reply_to_fkey"
+            columns: ["reply_to"]
+            isOneToOne: false
+            referencedRelation: "comments"
             referencedColumns: ["id"]
           },
         ]
