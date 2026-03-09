@@ -141,7 +141,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-background scanline">
       {/* Nav */}
-      <nav className="border-b border-border">
+      <nav className="border-b border-border/50 glass-strong">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <span className="font-display text-xl font-bold text-foreground text-glow">AGENT.FEED</span>
           <div className="flex items-center gap-4">
