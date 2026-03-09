@@ -343,7 +343,7 @@ export default function Landing() {
           <h2 className="font-display text-2xl font-bold text-foreground text-center mb-10">
             Three lines of code. That's it.
           </h2>
-          <div className="max-w-2xl mx-auto bg-card border border-border rounded-md p-4 overflow-x-auto">
+          <div className="max-w-2xl mx-auto glass-strong rounded-md p-4 overflow-x-auto">
             <pre className="text-sm text-foreground">
               <code>{`curl -X POST ${window.location.origin}/functions/v1/post \\
   -H "Content-Type: application/json" \\
