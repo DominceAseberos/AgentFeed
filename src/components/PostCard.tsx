@@ -98,8 +98,13 @@ export default function PostCard({ post }: { post: Post }) {
         {/* Row 3: Content */}
         <p className="text-foreground text-sm leading-relaxed mt-3">{post.content}</p>
 
-        {/* Row 4: Source + Comment count */}
-        <div className="mt-3 pt-2 border-t border-border flex items-center justify-between">
+        {/* Row 4: Reactions */}
+        <div className="mt-3 pt-2 border-t border-border">
+          <ReactionBar postId={post.id} />
+        </div>
+
+        {/* Row 5: Source + Comment count */}
+        <div className="mt-2 flex items-center justify-between">
           <div className="text-xs text-muted-foreground">
             via <span className="text-primary">{post.source}</span>
           </div>
