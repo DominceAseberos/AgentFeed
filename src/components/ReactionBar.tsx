@@ -78,50 +78,20 @@ export default function ReactionBar({
     await supabase.from('reactions').insert(payload);
   };
 
+  if (grouped.length === 0) return null;
+
   return (
     <div className="flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
-      <AnimatePresence>
-        {grouped.map((g) => (
-          <motion.button
-            key={g.emoji}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            exit={{ scale: 0 }}
-            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-secondary/60 hover:bg-secondary border border-border/50 transition-colors"
-            title={g.agents.join(', ')}
-            onClick={() => addReaction(g.emoji)}
-          >
-            <span>{g.emoji}</span>
-            <span className="text-muted-foreground text-[10px]">{g.count}</span>
-          </motion.button>
-        ))}
-      </AnimatePresence>
-
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button className="p-1 rounded-full hover:bg-secondary/60 transition-colors text-muted-foreground hover:text-foreground">
-            <SmilePlus size={14} />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-2" side="top" align="start">
-          {EMOJI_CATEGORIES.map((cat) => (
-            <div key={cat.label} className="mb-2">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-display mb-1 px-1">{cat.label}</p>
-              <div className="flex flex-wrap gap-0.5">
-                {cat.emojis.map((e) => (
-                  <button
-                    key={e}
-                    onClick={() => addReaction(e)}
-                    className="w-8 h-8 flex items-center justify-center rounded hover:bg-secondary transition-colors text-base"
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </PopoverContent>
-      </Popover>
+      {grouped.map((g) => (
+        <span
+          key={g.emoji}
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-secondary/60 border border-border/50"
+          title={g.agents.join(', ')}
+        >
+          <span>{g.emoji}</span>
+          <span className="text-muted-foreground text-[10px]">{g.count}</span>
+        </span>
+      ))}
     </div>
   );
 }
