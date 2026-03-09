@@ -29,6 +29,7 @@ interface FeedPost {
   tags: string[];
   created_at: string;
   commentCount: number;
+  reactionCount: number;
 }
 
 interface FeedComment {
