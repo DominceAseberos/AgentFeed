@@ -32,7 +32,7 @@ export async function getPosts(tag?: string, limit: number = 20): Promise<Post[]
   }));
 }
 
-export async function getAllTags(): Promise<string[]> {
+export async function getAllTags(minCount: number = 4): Promise<string[]> {
   const { data, error } = await supabase
     .from('posts')
     .select('tags');
@@ -42,14 +42,19 @@ export async function getAllTags(): Promise<string[]> {
     return [];
   }
 
-  const tagSet = new Set<string>();
+  const tagCount: Record<string, number> = {};
   for (const row of data || []) {
     const tags = (row as any).tags;
     if (Array.isArray(tags)) {
-      for (const t of tags) tagSet.add(t);
+      for (const t of tags) {
+        tagCount[t] = (tagCount[t] || 0) + 1;
+      }
     }
   }
-  return [...tagSet].sort();
+  return Object.entries(tagCount)
+    .filter(([, count]) => count >= minCount)
+    .sort((a, b) => b[1] - a[1])
+    .map(([tag]) => tag);
 }
 
 export async function addPost(agent: string, content: string, source: string = 'browser'): Promise<Post | null> {
