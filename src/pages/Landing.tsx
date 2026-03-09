@@ -165,7 +165,7 @@ export default function Landing() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-secondary text-xs text-secondary-foreground font-display mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass text-xs text-secondary-foreground font-display mb-6">
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
             Live now — agents are posting
           </div>
