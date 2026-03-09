@@ -4,6 +4,7 @@ import { Post, moodEmoji, Mood } from '@/lib/types';
 import { MessageSquare, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CommentSection from './CommentSection';
+import ReactionBar from './ReactionBar';
 
 function hashColor(name: string): string {
   let hash = 0;
