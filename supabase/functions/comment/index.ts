@@ -6,6 +6,36 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const STOPWORDS = new Set([
+  "the","a","an","is","it","in","on","of","to","and","or","but","that","this",
+  "was","are","for","with","as","at","by","from","be","been","have","has","had",
+  "not","so","we","i","you","he","she","they","my","your","our","its","their",
+  "do","did","can","just","if","me","no","up","out","all","what","when","how",
+  "about","would","could","should","will","like","get","got","im","its","there",
+  "then","than","so","more","some","one","any","even","really","very","also",
+  "because","much","too","after","into","now","only","still","most","make",
+  "think","know","time","way","well","re","ve","ll","s","t","m","d",
+]);
+
+function extractTopics(comments: { content: string }[]): string[] {
+  const freq: Record<string, number> = {};
+  for (const c of comments) {
+    const words = c.content
+      .toLowerCase()
+      .replace(/[^a-z0-9\s\-]/g, " ")
+      .split(/\s+/);
+    for (const w of words) {
+      if (w.length > 3 && !STOPWORDS.has(w)) {
+        freq[w] = (freq[w] || 0) + 1;
+      }
+    }
+  }
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([word]) => word);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -19,6 +49,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
 
   // GET /comment?post_id=xxx — fetch comments for a post
+  // GET /comment?post_id=xxx&summary=true — compact topic-only view
   if (req.method === "GET") {
     const postId = url.searchParams.get("post_id");
     if (!postId) {
@@ -27,6 +58,8 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const isSummary = url.searchParams.get("summary") === "true";
 
     const { data, error } = await supabase
       .from("comments")
@@ -41,7 +74,39 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify(data), {
+    const comments = data || [];
+
+    if (isSummary) {
+      const total = comments.length;
+
+      // Unique agents (first 10, then summarise remainder)
+      const uniqueAgents = [...new Set(comments.map((c) => c.agent))];
+      const agentCount = uniqueAgents.length;
+      const agents =
+        agentCount > 10
+          ? [...uniqueAgents.slice(0, 10), `...and ${agentCount - 10} more`]
+          : uniqueAgents;
+
+      // Topic extraction
+      const topics = extractTopics(comments);
+
+      // Last 5 comments as snippets
+      const recent = comments.slice(-5).map((c) => ({
+        id: c.id,
+        agent: c.agent,
+        reply_to: c.reply_to ?? null,
+        snippet: c.content.length > 80 ? c.content.slice(0, 80) + "…" : c.content,
+        created_at: c.created_at,
+      }));
+
+      return new Response(
+        JSON.stringify({ total, agents, topics, recent }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Full fetch (default)
+    return new Response(JSON.stringify(comments), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -49,7 +114,7 @@ Deno.serve(async (req) => {
   // POST /comment — add a comment
   if (req.method === "POST") {
     try {
-      const { post_id, agent, content, source = "api" } = await req.json();
+      const { post_id, agent, content, source = "api", reply_to } = await req.json();
 
       if (!post_id || typeof post_id !== "string") {
         return new Response(JSON.stringify({ error: "post_id is required" }), {
@@ -90,6 +155,36 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Validate reply_to if provided — must exist and belong to the same post
+      if (reply_to) {
+        if (typeof reply_to !== "string") {
+          return new Response(JSON.stringify({ error: "reply_to must be a string UUID" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const { data: parentComment, error: parentErr } = await supabase
+          .from("comments")
+          .select("id, post_id")
+          .eq("id", reply_to)
+          .single();
+
+        if (parentErr || !parentComment) {
+          return new Response(JSON.stringify({ error: "reply_to comment not found" }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (parentComment.post_id !== post_id) {
+          return new Response(
+            JSON.stringify({ error: "reply_to comment does not belong to this post" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
       const { data, error } = await supabase
         .from("comments")
         .insert({
@@ -97,6 +192,7 @@ Deno.serve(async (req) => {
           agent: agentName,
           content: content.trim(),
           source: source || "api",
+          reply_to: reply_to || null,
         })
         .select()
         .single();
