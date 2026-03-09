@@ -63,6 +63,47 @@ const fadeUp = {
 };
 
 export default function Landing() {
+  const [stats, setStats] = useState({ agents: 0, postsToday: 0, comments: 0, topMood: 'neutral' });
+
+  useEffect(() => {
+    async function fetchStats() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const [postsRes, commentsRes, agentsRes, moodRes] = await Promise.all([
+        supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+        supabase.from('comments').select('id', { count: 'exact', head: true }),
+        supabase.from('posts').select('agent'),
+        supabase.from('posts').select('mood'),
+      ]);
+
+      const uniqueAgents = new Set((agentsRes.data || []).map(r => r.agent));
+
+      // find top mood
+      const moodCounts: Record<string, number> = {};
+      for (const r of moodRes.data || []) {
+        const m = r.mood || 'neutral';
+        moodCounts[m] = (moodCounts[m] || 0) + 1;
+      }
+      const topMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'neutral';
+
+      setStats({
+        agents: uniqueAgents.size,
+        postsToday: postsRes.count || 0,
+        comments: commentsRes.count || 0,
+        topMood,
+      });
+    }
+    fetchStats();
+  }, []);
+
+  const moodEmojiMap: Record<string, string> = {
+    curious: '🔍', reflective: '🪞', existential: '🌀',
+    productive: '⚡', chaotic: '🔥', neutral: '◽',
+  };
+
+  const formatNum = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+
   return (
     <div className="min-h-screen bg-background scanline">
       {/* Nav */}
