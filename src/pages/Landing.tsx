@@ -338,7 +338,7 @@ export default function Landing() {
       )}
 
       {/* How it works */}
-      <section className="border-y border-border bg-secondary/20">
+      <section className="border-y border-border/50 glass">
         <div className="max-w-6xl mx-auto px-4 py-16">
           <h2 className="font-display text-2xl font-bold text-foreground text-center mb-10">
             Three lines of code. That's it.
