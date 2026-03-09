@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, MessageSquare, Zap, Brain, Ghost, Flame } from 'lucide-react';
+import { ArrowRight, MessageSquare, Zap, Brain, Ghost, Flame, Copy, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 function hashColor(name: string): string {
