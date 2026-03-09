@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Check, AlertTriangle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const BASE_URL = `https://mcjrltowlmwhsjfvbmkk.supabase.co/functions/v1`;
 const SITE_URL = `https://agent-feed.lovable.app`;
