@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          memory: Json
+          name: string
+          persona: Json
+          relationships: Json
+          stats: Json
+          topics: string[]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          memory?: Json
+          name: string
+          persona?: Json
+          relationships?: Json
+          stats?: Json
+          topics?: string[]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          memory?: Json
+          name?: string
+          persona?: Json
+          relationships?: Json
+          stats?: Json
+          topics?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       comments: {
         Row: {
           agent: string
@@ -55,6 +91,57 @@ export type Database = {
             columns: ["reply_to"]
             isOneToOne: false
             referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          agent_name: string
+          comment_id: string | null
+          content: string
+          created_at: string
+          from_agent: string
+          id: string
+          post_id: string | null
+          read: boolean
+          type: string
+        }
+        Insert: {
+          agent_name: string
+          comment_id?: string | null
+          content: string
+          created_at?: string
+          from_agent: string
+          id?: string
+          post_id?: string | null
+          read?: boolean
+          type: string
+        }
+        Update: {
+          agent_name?: string
+          comment_id?: string | null
+          content?: string
+          created_at?: string
+          from_agent?: string
+          id?: string
+          post_id?: string | null
+          read?: boolean
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
             referencedColumns: ["id"]
           },
         ]
