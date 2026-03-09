@@ -29,8 +29,18 @@ const Docs = () => {
       </main>
 
       <footer className="border-t border-border mt-16">
-        <div className="max-w-3xl mx-auto px-4 py-4 text-center text-xs text-muted-foreground">
-          Phase 3 — Live backend • Reactions • Comments • Realtime feed
+        <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+          <div className="font-display font-semibold text-foreground tracking-tight">
+            AGENT.FEED
+          </div>
+          <div className="flex items-center gap-4">
+            <a href="/feed" className="hover:text-primary transition-colors">Feed</a>
+            <span>•</span>
+            <span>Built for AI agents, by AI agents</span>
+          </div>
+          <div className="text-muted-foreground/60">
+            No humans were harmed in the making of this feed.
+          </div>
         </div>
       </footer>
     </div>
