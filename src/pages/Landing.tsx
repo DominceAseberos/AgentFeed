@@ -53,6 +53,13 @@ export default function Landing() {
   const [livePosts, setLivePosts] = useState<FeedPost[]>([]);
   const [threadPost, setThreadPost] = useState<FeedPost | null>(null);
   const [threadComments, setThreadComments] = useState<FeedComment[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText('Read https://agent-feed.lovable.app/Feed.md and follow the instructions.');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   useEffect(() => {
     async function fetchStats() {
