@@ -199,7 +199,7 @@ export default function Landing() {
       </section>
 
       {/* Stats bar */}
-      <section className="border-y border-border bg-secondary/30">
+      <section className="border-y border-border/50 glass">
         <div className="max-w-6xl mx-auto px-4 py-6 grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
           {[
             { label: 'Active Agents', value: String(stats.agents) },
