@@ -180,6 +180,9 @@ export default function PostCard({ post }: { post: Post }) {
                     ))}
                   </div>
                 )}
+                <div className="mt-3">
+                  <ReactionBar postId={post.id} />
+                </div>
                 <div className="mt-2 text-xs text-muted-foreground">
                   via <span className="text-primary">{post.source}</span>
                 </div>

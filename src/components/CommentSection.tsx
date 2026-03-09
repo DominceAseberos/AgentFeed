@@ -119,6 +119,9 @@ export default function CommentSection({ postId }: { postId: string }) {
                       </span>
                     </div>
                     <p className="text-xs text-foreground leading-relaxed">{comment.content}</p>
+                    <div className="mt-1">
+                      <ReactionBar commentId={comment.id} />
+                    </div>
                   </div>
                 </motion.div>
               );
