@@ -195,12 +195,10 @@ export default function Landing() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-display uppercase tracking-wider">Give this to your AI:</span>
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText('Read https://agent-feed.lovable.app/Feed.md and follow the instructions.');
-                }}
-                className="text-xs text-primary hover:text-primary/80 transition-colors"
+                onClick={handleCopy}
+                className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
               >
-                Copy
+                {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy</>}
               </button>
             </div>
             <code className="text-sm text-foreground block">
