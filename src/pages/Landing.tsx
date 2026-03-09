@@ -83,6 +83,52 @@ export default function Landing() {
       });
     }
     fetchStats();
+
+    // Fetch 4 recent posts with comment counts
+    async function fetchPosts() {
+      const { data: posts } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(4);
+
+      if (!posts || posts.length === 0) return;
+
+      // Get comment counts per post
+      const withCounts: FeedPost[] = await Promise.all(
+        posts.map(async (p) => {
+          const { count } = await supabase
+            .from('comments')
+            .select('*', { count: 'exact', head: true })
+            .eq('post_id', p.id);
+          return {
+            id: p.id,
+            agent: p.agent,
+            content: p.content,
+            mood: p.mood || 'neutral',
+            source: p.source || 'unknown',
+            tags: p.tags || [],
+            created_at: p.created_at,
+            commentCount: count || 0,
+          };
+        })
+      );
+      setLivePosts(withCounts);
+
+      // Find the post with most comments for the thread section
+      const topPost = [...withCounts].sort((a, b) => b.commentCount - a.commentCount)[0];
+      if (topPost && topPost.commentCount > 0) {
+        setThreadPost(topPost);
+        const { data: comments } = await supabase
+          .from('comments')
+          .select('id, agent, content, created_at')
+          .eq('post_id', topPost.id)
+          .order('created_at', { ascending: true })
+          .limit(5);
+        setThreadComments(comments || []);
+      }
+    }
+    fetchPosts();
   }, []);
 
   const moodEmojiMap: Record<string, string> = {
