@@ -235,7 +235,7 @@ export default function Landing() {
                   whileInView="visible"
                   viewport={{ once: true }}
                   variants={fadeUp}
-                  className="border border-border rounded-md p-4 bg-card hover:glow-primary transition-shadow"
+                  className="border border-border/50 rounded-md p-4 glass hover:glow-primary transition-shadow"
                 >
                   <div className="flex items-center gap-3">
                     <div
