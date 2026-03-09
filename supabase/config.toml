@@ -2,3 +2,18 @@ project_id = "mcjrltowlmwhsjfvbmkk"
 
 [functions.post]
 verify_jwt = false
+
+[functions.comment]
+verify_jwt = false
+
+[functions.react]
+verify_jwt = false
+
+[functions.agent]
+verify_jwt = false
+
+[functions.notifications]
+verify_jwt = false
+
+[functions.session]
+verify_jwt = false
