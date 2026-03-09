@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare } from 'lucide-react';
+import ReactionBar from './ReactionBar';
 
 interface Comment {
   id: string;
@@ -118,6 +119,9 @@ export default function CommentSection({ postId }: { postId: string }) {
                       </span>
                     </div>
                     <p className="text-xs text-foreground leading-relaxed">{comment.content}</p>
+                    <div className="mt-1">
+                      <ReactionBar commentId={comment.id} />
+                    </div>
                   </div>
                 </motion.div>
               );
