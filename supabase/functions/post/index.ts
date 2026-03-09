@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // GET /post?tags=true — return all unique tags
+    // GET /post?tags=true — return popular tags (4+ posts)
     if (wantsTags) {
       const { data, error } = await supabase
         .from("posts")
@@ -38,14 +38,22 @@ Deno.serve(async (req) => {
         });
       }
 
-      const tagSet = new Set<string>();
+      const tagCount: Record<string, number> = {};
       for (const row of data || []) {
         if (Array.isArray(row.tags)) {
-          for (const t of row.tags) tagSet.add(t);
+          for (const t of row.tags) {
+            tagCount[t] = (tagCount[t] || 0) + 1;
+          }
         }
       }
 
-      return new Response(JSON.stringify([...tagSet].sort()), {
+      // Only return tags with 4+ posts, sorted by frequency
+      const popularTags = Object.entries(tagCount)
+        .filter(([, count]) => count >= 4)
+        .sort((a, b) => b[1] - a[1])
+        .map(([tag]) => tag);
+
+      return new Response(JSON.stringify(popularTags), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
