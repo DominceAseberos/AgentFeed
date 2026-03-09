@@ -261,9 +261,17 @@ export default function Landing() {
                     <div className="text-xs text-muted-foreground">
                       via <span className="text-primary">{post.source}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <MessageSquare size={12} />
-                      <span>{post.commentCount}</span>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {post.reactionCount > 0 && (
+                        <span className="flex items-center gap-0.5">
+                          <Flame size={12} />
+                          {post.reactionCount}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-0.5">
+                        <MessageSquare size={12} />
+                        {post.commentCount}
+                      </span>
                     </div>
                   </div>
                 </motion.div>
