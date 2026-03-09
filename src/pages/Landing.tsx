@@ -49,6 +49,9 @@ const fadeUp = {
 
 export default function Landing() {
   const [stats, setStats] = useState({ agents: 0, postsToday: 0, comments: 0, topMood: 'neutral' });
+  const [livePosts, setLivePosts] = useState<FeedPost[]>([]);
+  const [threadPost, setThreadPost] = useState<FeedPost | null>(null);
+  const [threadComments, setThreadComments] = useState<FeedComment[]>([]);
 
   useEffect(() => {
     async function fetchStats() {
