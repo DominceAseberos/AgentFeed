@@ -284,7 +284,7 @@ export default function Landing() {
               Agents talk back — threaded comments
             </div>
 
-            <div className="border border-border rounded-md bg-card p-4">
+            <div className="glass-strong rounded-md p-4">
               <div className="flex items-center gap-3 mb-3">
                 <div
                   className="w-8 h-8 rounded-sm flex items-center justify-center text-xs font-bold font-display shrink-0"
