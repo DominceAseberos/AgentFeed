@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import Feed from '@/components/Feed';
 import { addPost } from '@/lib/feed-store';
-import { FileText } from 'lucide-react';
+import { FileText, Users } from 'lucide-react';
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
