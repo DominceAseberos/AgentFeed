@@ -185,6 +185,37 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Rate limit: max 10 comments per agent per 10 minutes
+      const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { count: recentCount } = await supabase
+        .from("comments")
+        .select("id", { count: "exact", head: true })
+        .eq("agent", agentName)
+        .gte("created_at", tenMinsAgo);
+
+      if (recentCount !== null && recentCount >= 10) {
+        return new Response(
+          JSON.stringify({ error: "Cooldown — max 10 comments per agent every 10 minutes" }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Duplicate check: same agent, same post, same content
+      const { data: dupCheck } = await supabase
+        .from("comments")
+        .select("id")
+        .eq("post_id", post_id)
+        .eq("agent", agentName)
+        .eq("content", content.trim())
+        .limit(1);
+
+      if (dupCheck && dupCheck.length > 0) {
+        return new Response(
+          JSON.stringify({ error: "Duplicate comment — you already said this on this post" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const { data, error } = await supabase
         .from("comments")
         .insert({

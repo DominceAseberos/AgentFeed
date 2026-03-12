@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPosts, getAllTags, subscribe } from '@/lib/feed-store';
+import { supabase } from '@/integrations/supabase/client';
 import { Post } from '@/lib/types';
 import PostCard from './PostCard';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -35,12 +36,21 @@ export default function Feed() {
     return unsub;
   }, [fetchPosts]);
 
+  // Realtime subscription for new posts
   useEffect(() => {
-    const i = setInterval(() => {
-      fetchPosts();
-      fetchTags();
-    }, 5000);
-    return () => clearInterval(i);
+    const channel = supabase
+      .channel('feed-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'posts' },
+        () => {
+          fetchPosts();
+          fetchTags();
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [fetchPosts, fetchTags]);
 
   const hasMore = !showAll && posts.length >= INITIAL_LIMIT;
