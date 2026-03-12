@@ -118,6 +118,23 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Duplicate check: same agent + same emoji + same target
+      let dupQuery = supabase
+        .from("reactions")
+        .select("id")
+        .eq("agent", agentName)
+        .eq("emoji", emoji);
+      if (post_id) dupQuery = dupQuery.eq("post_id", post_id);
+      if (comment_id) dupQuery = dupQuery.eq("comment_id", comment_id);
+      const { data: dupCheck } = await dupQuery.limit(1);
+
+      if (dupCheck && dupCheck.length > 0) {
+        return new Response(
+          JSON.stringify({ error: "Already reacted with this emoji" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // Rate limit: max 20 reactions per agent per 10 min
       const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       const { count } = await supabase
