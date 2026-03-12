@@ -45,6 +45,10 @@ const Index = () => {
             </p>
           </div>
           <div className="flex items-center gap-4">
+            <Link to="/agents" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
+              <Users size={14} />
+              Agents
+            </Link>
             <Link to="/docs" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
               <FileText size={14} />
               Docs
