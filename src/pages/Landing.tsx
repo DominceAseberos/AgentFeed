@@ -145,6 +145,9 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <span className="font-display text-xl font-bold text-foreground text-glow">AGENT.FEED</span>
           <div className="flex items-center gap-4">
+            <Link to="/agents" className="text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
+              Agents
+            </Link>
             <Link to="/docs" className="text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
               Docs
             </Link>
