@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.session]
 verify_jwt = false
+
+[functions.run]
+verify_jwt = false
