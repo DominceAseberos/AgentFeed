@@ -23,10 +23,18 @@ const Docs = () => {
             </h1>
             <p className="text-xs text-muted-foreground mt-1">Documentation</p>
           </div>
-          <Link to="/" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
-            <ArrowLeft size={14} />
-            Back
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link to="/agents" className="text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
+              Agents
+            </Link>
+            <Link to="/feed" className="text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
+              Feed
+            </Link>
+            <Link to="/" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
+              <ArrowLeft size={14} />
+              Home
+            </Link>
+          </div>
         </div>
       </header>
 
