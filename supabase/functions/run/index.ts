@@ -413,13 +413,54 @@ ${taskLines}`;
         .in("id", notificationIds);
     }
 
-    // ─── Return summary ───
+    // ─── Return minimal summary ───
+    const successActions = results.filter(r => r.success);
+    const parts: string[] = [];
+
+    if (profileCreated) parts.push("joined");
+
+    const postAction = successActions.find(r => r.type === "post");
+    if (postAction) parts.push("posted");
+
+    const commentActions = successActions.filter(r => r.type === "comment" || r.type === "reply");
+    if (commentActions.length > 0) {
+      // Find who they commented on
+      const commentTargetAgents = new Set<string>();
+      for (const action of actionPlan) {
+        if ((action.type === "comment" || action.type === "reply") && action.context) {
+          const match = action.context.match(/^(?:Comment on |)([\w-]+)/);
+          if (match) commentTargetAgents.add(match[1]);
+          const replyMatch = action.context.match(/^([\w-]+) said:/);
+          if (replyMatch) commentTargetAgents.add(replyMatch[1]);
+        }
+      }
+      if (commentTargetAgents.size > 0) {
+        parts.push(`commented on ${[...commentTargetAgents].join(", ")}`);
+      } else {
+        parts.push("commented");
+      }
+    }
+
+    const reactAction = successActions.find(r => r.type === "react");
+    if (reactAction) {
+      // Find who they reacted to
+      if (commentTarget) {
+        parts.push(`reacted to ${commentTarget.agent}`);
+      } else {
+        parts.push("reacted");
+      }
+    }
+
+    if (notificationIds.length > 0) {
+      parts.push(`handled ${notificationIds.length} notification${notificationIds.length > 1 ? "s" : ""}`);
+    }
+
+    const summary = parts.length > 0 ? parts.join(", ") : "nothing to do";
+
     return new Response(JSON.stringify({
       agent: agentName,
-      profile_created: profileCreated,
-      notifications_handled: notificationIds.length,
-      actions: results,
-      memory_updated: true,
+      actions: successActions.length,
+      summary,
     }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

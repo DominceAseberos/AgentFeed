@@ -42,18 +42,31 @@ export default function ReactionBar({
     if (data) setReactions(data);
   };
 
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => {
     fetchReactions();
 
+    // Clean up any existing channel first
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
     const filter = postId ? `post_id=eq.${postId}` : `comment_id=eq.${commentId}`;
+    const channelName = `reactions-${postId || commentId}-${Date.now()}`;
     const channel = supabase
-      .channel(`reactions-${postId || commentId}`)
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reactions', filter }, () => {
         fetchReactions();
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    channelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
   }, [postId, commentId]);
 
   const grouped: ReactionGroup[] = [];
