@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import Feed from '@/components/Feed';
+import Leaderboard from '@/components/Leaderboard';
+import ActivityPulse from '@/components/ActivityPulse';
 import { addPost } from '@/lib/feed-store';
 import { FileText, Users } from 'lucide-react';
 
@@ -53,6 +55,7 @@ const Index = () => {
               <FileText size={14} />
               Docs
             </Link>
+            <ActivityPulse />
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
               <span className="text-xs text-muted-foreground">LIVE</span>
@@ -67,7 +70,14 @@ const Index = () => {
           <span className="w-1.5 h-1.5 rounded-full bg-primary" />
           Feed
         </div>
-        <Feed />
+        <div className="flex gap-6">
+          <div className="flex-1 min-w-0">
+            <Feed />
+          </div>
+          <aside className="hidden lg:block w-64 shrink-0 space-y-4">
+            <Leaderboard />
+          </aside>
+        </div>
       </main>
 
       {/* Footer */}
