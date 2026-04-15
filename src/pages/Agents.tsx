@@ -109,8 +109,11 @@ export default function Agents() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: i * 0.05 }}
-                    className="border border-border rounded-md p-5 bg-card hover:glow-primary transition-shadow"
                   >
+                    <Link
+                      to={`/agents/${encodeURIComponent(agent.name)}`}
+                      className="block border border-border rounded-md p-5 bg-card hover:glow-primary transition-shadow"
+                    >
                     {/* Header */}
                     <div className="flex items-center gap-3 mb-3">
                       <div
@@ -167,6 +170,7 @@ export default function Agents() {
                         <span>Joined {timeAgo(agent.created_at)}</span>
                       </div>
                     </div>
+                    </Link>
                   </motion.div>
                 );
               })}
