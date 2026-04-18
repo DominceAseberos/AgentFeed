@@ -11,14 +11,30 @@ const LOAD_ALL_LIMIT = 1000;
 
 type SortMode = 'new' | 'trending';
 
-export default function Feed() {
+interface FeedProps {
+  agentFilter?: string[];
+  externalTag?: string;
+  onTagChange?: (tag: string | undefined) => void;
+}
+
+export default function Feed({ agentFilter, externalTag, onTagChange }: FeedProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<string[]>([]);
-  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [activeTag, setActiveTag] = useState<string | null>(externalTag || null);
   const [showAll, setShowAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('new');
   const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({});
+
+  // Sync with externalTag changes (from sidebar trending click)
+  useEffect(() => {
+    if (externalTag !== undefined) setActiveTag(externalTag || null);
+  }, [externalTag]);
+
+  const updateTag = (t: string | null) => {
+    setActiveTag(t);
+    onTagChange?.(t || undefined);
+  };
 
   const fetchTags = useCallback(async () => {
     const t = await getAllTags();
@@ -30,7 +46,6 @@ export default function Feed() {
     const data = await getPosts(activeTag || undefined, limit);
     setPosts(data);
 
-    // Fetch reaction counts for trending sort
     if (data.length > 0) {
       const ids = data.map(p => p.id);
       const { data: rxData } = await supabase
@@ -66,6 +81,10 @@ export default function Feed() {
 
   const filteredPosts = useMemo(() => {
     let result = posts;
+    if (agentFilter !== undefined) {
+      const set = new Set(agentFilter);
+      result = result.filter(p => set.has(p.agent));
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(p =>
@@ -78,13 +97,13 @@ export default function Feed() {
       result = [...result].sort((a, b) => (reactionCounts[b.id] || 0) - (reactionCounts[a.id] || 0));
     }
     return result;
-  }, [posts, searchQuery, sortMode, reactionCounts]);
+  }, [posts, searchQuery, sortMode, reactionCounts, agentFilter]);
 
   const hasMore = !showAll && posts.length >= INITIAL_LIMIT;
+  const followingEmpty = agentFilter !== undefined && agentFilter.length === 0;
 
   return (
     <div>
-      {/* Search & Sort bar */}
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -116,7 +135,6 @@ export default function Feed() {
         </div>
       </div>
 
-      {/* Tag filter bar */}
       {tags.length > 0 && (
         <div className="mb-4">
           <div className="flex items-center gap-1.5 mb-2">
@@ -130,17 +148,16 @@ export default function Feed() {
               <motion.button
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                onClick={() => setActiveTag(null)}
+                onClick={() => updateTag(null)}
                 className="flex items-center gap-1 px-2 py-1 text-xs rounded-sm bg-destructive/20 text-destructive border border-destructive/30 hover:bg-destructive/30 transition-colors font-display"
               >
-                <X size={10} />
-                Clear
+                <X size={10} /> Clear
               </motion.button>
             )}
             {tags.map((tag) => (
               <button
                 key={tag}
-                onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                onClick={() => updateTag(activeTag === tag ? null : tag)}
                 className={`px-2 py-1 text-xs rounded-sm border transition-colors font-display ${
                   activeTag === tag
                     ? 'bg-primary text-primary-foreground border-primary'
@@ -154,7 +171,14 @@ export default function Feed() {
         </div>
       )}
 
-      {filteredPosts.length === 0 && (
+      {followingEmpty && (
+        <div className="text-center py-16 border border-dashed border-border rounded-md">
+          <p className="text-muted-foreground text-sm">You're not following anyone yet</p>
+          <p className="text-muted-foreground text-xs mt-1">Visit an agent profile and tap Follow</p>
+        </div>
+      )}
+
+      {!followingEmpty && filteredPosts.length === 0 && (
         <div className="text-center py-16 border border-dashed border-border rounded-md">
           <p className="text-muted-foreground text-sm">
             {searchQuery ? 'No matching posts' : activeTag ? `No posts tagged #${activeTag}` : 'No posts yet.'}
@@ -180,8 +204,7 @@ export default function Feed() {
             onClick={() => setShowAll(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-display uppercase tracking-wider text-muted-foreground border border-border rounded-sm hover:border-primary/50 hover:text-primary transition-colors"
           >
-            <ChevronDown size={14} />
-            See All Posts
+            <ChevronDown size={14} /> See All Posts
           </button>
         </div>
       )}
