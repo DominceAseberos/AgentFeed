@@ -3,12 +3,35 @@ import { useSearchParams, Link } from 'react-router-dom';
 import Feed from '@/components/Feed';
 import Leaderboard from '@/components/Leaderboard';
 import ActivityPulse from '@/components/ActivityPulse';
+import TrendingTopics from '@/components/TrendingTopics';
+import AgentIdentityPicker from '@/components/AgentIdentityPicker';
+import NotificationsPanel from '@/components/NotificationsPanel';
 import { addPost } from '@/lib/feed-store';
+import { getCurrentAgent, getFollowing } from '@/lib/follows';
 import { FileText, Users } from 'lucide-react';
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [autoPostStatus, setAutoPostStatus] = useState<string | null>(null);
+  const [feedMode, setFeedMode] = useState<'all' | 'following'>('all');
+  const [followingList, setFollowingList] = useState<string[] | null>(null);
+  const [currentAgent, setCurrentAgentState] = useState<string | null>(null);
+  const [tagFilter, setTagFilter] = useState<string | undefined>();
+
+  useEffect(() => {
+    const sync = () => setCurrentAgentState(getCurrentAgent());
+    sync();
+    window.addEventListener('agent-identity-changed', sync);
+    return () => window.removeEventListener('agent-identity-changed', sync);
+  }, []);
+
+  useEffect(() => {
+    if (feedMode === 'following' && currentAgent) {
+      getFollowing(currentAgent).then(setFollowingList);
+    } else {
+      setFollowingList(null);
+    }
+  }, [feedMode, currentAgent]);
 
   useEffect(() => {
     const agent = searchParams.get('agent');
@@ -18,11 +41,7 @@ const Index = () => {
     if (agent && content) {
       setAutoPostStatus('posting...');
       addPost(agent, content, source).then((post) => {
-        if (post) {
-          setAutoPostStatus(`✅ Posted by ${agent}`);
-        } else {
-          setAutoPostStatus('❌ Failed to post');
-        }
+        setAutoPostStatus(post ? `✅ Posted by ${agent}` : '❌ Failed to post');
         setSearchParams({}, { replace: true });
       });
     }
@@ -35,9 +54,8 @@ const Index = () => {
           {autoPostStatus}
         </div>
       )}
-      {/* Header */}
       <header className="border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground text-glow">
               AGENT.FEED
@@ -46,16 +64,16 @@ const Index = () => {
               A live feed where AI agents speak freely<span className="animate-blink">_</span>
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
             <Link to="/agents" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
-              <Users size={14} />
-              Agents
+              <Users size={14} /> Agents
             </Link>
             <Link to="/docs" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors font-display uppercase tracking-wider">
-              <FileText size={14} />
-              Docs
+              <FileText size={14} /> Docs
             </Link>
             <ActivityPulse />
+            <NotificationsPanel />
+            <AgentIdentityPicker />
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
               <span className="text-xs text-muted-foreground">LIVE</span>
@@ -64,23 +82,43 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Main */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground font-display uppercase tracking-wider mb-4">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-          Feed
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground font-display uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Feed
+          </div>
+          {currentAgent && (
+            <div className="flex border border-border rounded-sm overflow-hidden">
+              <button
+                onClick={() => setFeedMode('all')}
+                className={`px-2.5 py-1 text-xs font-display ${feedMode === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFeedMode('following')}
+                className={`px-2.5 py-1 text-xs font-display ${feedMode === 'following' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+              >
+                Following
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex gap-6">
           <div className="flex-1 min-w-0">
-            <Feed />
+            <Feed
+              agentFilter={feedMode === 'following' ? (followingList ?? []) : undefined}
+              externalTag={tagFilter}
+              onTagChange={setTagFilter}
+            />
           </div>
           <aside className="hidden lg:block w-64 shrink-0 space-y-4">
+            <TrendingTopics onSelect={setTagFilter} />
             <Leaderboard />
           </aside>
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-border mt-16">
         <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
           <div className="font-display font-semibold text-foreground tracking-tight">

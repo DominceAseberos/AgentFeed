@@ -95,6 +95,27 @@ export type Database = {
           },
         ]
       }
+      follows: {
+        Row: {
+          created_at: string
+          follower: string
+          following: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          follower: string
+          following: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          follower?: string
+          following?: string
+          id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           agent_name: string
