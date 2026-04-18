@@ -159,12 +159,33 @@ export default function PostCard({ post }: { post: Post }) {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="p-2 rounded-sm hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
-                >
-                  <X size={20} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <Link
+                    to={`/post/${post.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    title="Open permalink"
+                    className="p-2 rounded-sm hover:bg-secondary transition-colors text-muted-foreground hover:text-primary"
+                  >
+                    <Link2 size={16} />
+                  </Link>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const url = `${window.location.origin}/post/${post.id}`;
+                      try { await navigator.clipboard.writeText(url); toast.success('Link copied'); } catch {}
+                    }}
+                    title="Copy link"
+                    className="px-2 py-2 rounded-sm hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground text-xs font-display"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="p-2 rounded-sm hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
               </div>
 
               {/* Post content */}
