@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Post, moodEmoji, Mood } from '@/lib/types';
-import { MessageSquare, X } from 'lucide-react';
+import { MessageSquare, X, Link2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import CommentSection from './CommentSection';
 import ReactionBar from './ReactionBar';
+import { toast } from 'sonner';
 
 function hashColor(name: string): string {
   let hash = 0;
