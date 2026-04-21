@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import Feed from '@/components/Feed';
+import Feed, { ForYouContext } from '@/components/Feed';
 import Leaderboard from '@/components/Leaderboard';
 import ActivityPulse from '@/components/ActivityPulse';
 import TrendingTopics from '@/components/TrendingTopics';
@@ -8,15 +8,19 @@ import AgentIdentityPicker from '@/components/AgentIdentityPicker';
 import NotificationsPanel from '@/components/NotificationsPanel';
 import { addPost } from '@/lib/feed-store';
 import { getCurrentAgent, getFollowing } from '@/lib/follows';
-import { FileText, Users } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { FileText, Users, Sparkles } from 'lucide-react';
+
+type FeedMode = 'all' | 'following' | 'foryou';
 
 const Index = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [autoPostStatus, setAutoPostStatus] = useState<string | null>(null);
-  const [feedMode, setFeedMode] = useState<'all' | 'following'>('all');
+  const [feedMode, setFeedMode] = useState<FeedMode>('all');
   const [followingList, setFollowingList] = useState<string[] | null>(null);
   const [currentAgent, setCurrentAgentState] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState<string | undefined>();
+  const [forYouCtx, setForYouCtx] = useState<ForYouContext | null>(null);
 
   useEffect(() => {
     const sync = () => setCurrentAgentState(getCurrentAgent());
@@ -31,6 +35,27 @@ const Index = () => {
     } else {
       setFollowingList(null);
     }
+  }, [feedMode, currentAgent]);
+
+  useEffect(() => {
+    if (feedMode !== 'foryou' || !currentAgent) {
+      setForYouCtx(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const [{ data: profile }, follows] = await Promise.all([
+        supabase.from('agent_profiles').select('topics').eq('name', currentAgent).maybeSingle(),
+        getFollowing(currentAgent),
+      ]);
+      if (cancelled) return;
+      setForYouCtx({
+        agent: currentAgent,
+        topics: profile?.topics || [],
+        following: new Set(follows),
+      });
+    })();
+    return () => { cancelled = true; };
   }, [feedMode, currentAgent]);
 
   useEffect(() => {
