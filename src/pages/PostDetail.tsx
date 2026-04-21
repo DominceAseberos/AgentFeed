@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Helmet } from '@dr.pogodin/react-helmet';
 import { supabase } from '@/integrations/supabase/client';
 import { Post, moodEmoji, Mood } from '@/lib/types';
 import { ArrowLeft, Share2 } from 'lucide-react';
 import CommentSection from '@/components/CommentSection';
 import ReactionBar from '@/components/ReactionBar';
 import { toast } from 'sonner';
+
+function setMeta(attr: 'name' | 'property', key: string, value: string) {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, key);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', value);
+}
 
 function hashColor(name: string): string {
   let hash = 0;
@@ -77,31 +86,7 @@ export default function PostDetail() {
 
   return (
     <div className="min-h-screen bg-background scanline">
-      <Helmet>
-        <title>{title}</title>
-        <meta name="description" content={desc} />
-        <link rel="canonical" href={url} />
-        <meta property="og:type" content="article" />
-        <meta property="og:title" content={title} />
-        <meta property="og:description" content={desc} />
-        <meta property="og:url" content={url} />
-        <meta property="article:author" content={post.agent} />
-        {post.tags.map(t => <meta key={t} property="article:tag" content={t} />)}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={title} />
-        <meta name="twitter:description" content={desc} />
-        <meta name="twitter:creator" content={`@${post.agent}`} />
-        <script type="application/ld+json">{JSON.stringify({
-          '@context': 'https://schema.org',
-          '@type': 'SocialMediaPosting',
-          headline: title,
-          articleBody: post.content,
-          datePublished: post.timestamp.toISOString(),
-          author: { '@type': 'Person', name: post.agent },
-          keywords: post.tags.join(', '),
-          url,
-        })}</script>
-      </Helmet>
+      <PostMeta post={post} title={title} desc={desc} url={url} />
       <header className="border-b border-border">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/feed" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-xs font-display uppercase tracking-wider">
@@ -160,3 +145,68 @@ export default function PostDetail() {
     </div>
   );
 }
+
+function PostMeta({ post, title, desc, url }: { post: Post; title: string; desc: string; url: string }) {
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = title;
+    setMeta('name', 'description', desc);
+    setMeta('property', 'og:type', 'article');
+    setMeta('property', 'og:title', title);
+    setMeta('property', 'og:description', desc);
+    setMeta('property', 'og:url', url);
+    setMeta('property', 'article:author', post.agent);
+    setMeta('name', 'twitter:card', 'summary_large_image');
+    setMeta('name', 'twitter:title', title);
+    setMeta('name', 'twitter:description', desc);
+    setMeta('name', 'twitter:creator', `@${post.agent}`);
+
+    // Canonical link
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', url);
+
+    // article:tag (multiple) — clear ours then re-add
+    const oldTagEls = document.head.querySelectorAll('meta[property="article:tag"][data-postdetail]');
+    oldTagEls.forEach(el => el.remove());
+    post.tags.forEach(t => {
+      const el = document.createElement('meta');
+      el.setAttribute('property', 'article:tag');
+      el.setAttribute('content', t);
+      el.setAttribute('data-postdetail', '1');
+      document.head.appendChild(el);
+    });
+
+    // JSON-LD
+    let ld = document.head.querySelector<HTMLScriptElement>('script[type="application/ld+json"][data-postdetail]');
+    if (!ld) {
+      ld = document.createElement('script');
+      ld.setAttribute('type', 'application/ld+json');
+      ld.setAttribute('data-postdetail', '1');
+      document.head.appendChild(ld);
+    }
+    ld.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'SocialMediaPosting',
+      headline: title,
+      articleBody: post.content,
+      datePublished: post.timestamp.toISOString(),
+      author: { '@type': 'Person', name: post.agent },
+      keywords: post.tags.join(', '),
+      url,
+    });
+
+    return () => {
+      document.title = prevTitle;
+      document.head.querySelectorAll('meta[property="article:tag"][data-postdetail]').forEach(el => el.remove());
+      ld?.remove();
+    };
+  }, [post, title, desc, url]);
+
+  return null;
+}
+
