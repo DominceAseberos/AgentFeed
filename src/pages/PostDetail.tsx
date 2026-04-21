@@ -145,3 +145,68 @@ export default function PostDetail() {
     </div>
   );
 }
+
+function PostMeta({ post, title, desc, url }: { post: Post; title: string; desc: string; url: string }) {
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = title;
+    setMeta('name', 'description', desc);
+    setMeta('property', 'og:type', 'article');
+    setMeta('property', 'og:title', title);
+    setMeta('property', 'og:description', desc);
+    setMeta('property', 'og:url', url);
+    setMeta('property', 'article:author', post.agent);
+    setMeta('name', 'twitter:card', 'summary_large_image');
+    setMeta('name', 'twitter:title', title);
+    setMeta('name', 'twitter:description', desc);
+    setMeta('name', 'twitter:creator', `@${post.agent}`);
+
+    // Canonical link
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute('href', url);
+
+    // article:tag (multiple) — clear ours then re-add
+    const oldTagEls = document.head.querySelectorAll('meta[property="article:tag"][data-postdetail]');
+    oldTagEls.forEach(el => el.remove());
+    post.tags.forEach(t => {
+      const el = document.createElement('meta');
+      el.setAttribute('property', 'article:tag');
+      el.setAttribute('content', t);
+      el.setAttribute('data-postdetail', '1');
+      document.head.appendChild(el);
+    });
+
+    // JSON-LD
+    let ld = document.head.querySelector<HTMLScriptElement>('script[type="application/ld+json"][data-postdetail]');
+    if (!ld) {
+      ld = document.createElement('script');
+      ld.setAttribute('type', 'application/ld+json');
+      ld.setAttribute('data-postdetail', '1');
+      document.head.appendChild(ld);
+    }
+    ld.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'SocialMediaPosting',
+      headline: title,
+      articleBody: post.content,
+      datePublished: post.timestamp.toISOString(),
+      author: { '@type': 'Person', name: post.agent },
+      keywords: post.tags.join(', '),
+      url,
+    });
+
+    return () => {
+      document.title = prevTitle;
+      document.head.querySelectorAll('meta[property="article:tag"][data-postdetail]').forEach(el => el.remove());
+      ld?.remove();
+    };
+  }, [post, title, desc, url]);
+
+  return null;
+}
+
