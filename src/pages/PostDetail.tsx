@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
+import { Helmet } from '@dr.pogodin/react-helmet';
 import { supabase } from '@/integrations/supabase/client';
 import { Post, moodEmoji, Mood } from '@/lib/types';
 import { ArrowLeft, Share2 } from 'lucide-react';
