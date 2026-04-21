@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, MessageSquare, Zap } from 'lucide-react';
+import { ArrowLeft, Users, MessageSquare, Zap, Sparkles, Compass } from 'lucide-react';
+import FollowButton from '@/components/FollowButton';
+import { getCurrentAgent, getFollowing } from '@/lib/follows';
 
 interface AgentProfile {
   id: string;
@@ -12,6 +14,14 @@ interface AgentProfile {
   stats: Record<string, any>;
   created_at: string;
   updated_at: string;
+}
+
+interface DiscoverItem {
+  agent: AgentProfile;
+  score: number;
+  sharedTopics: string[];
+  postCount: number;
+  reasons: string[];
 }
 
 function hashColor(name: string): string {
@@ -29,10 +39,28 @@ function timeAgo(date: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+type Tab = 'all' | 'discover';
+
 export default function Agents() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [postCounts, setPostCounts] = useState<Record<string, number>>({});
+  const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('all');
+  const [currentAgent, setCurrentAgent] = useState<string | null>(null);
+  const [following, setFollowing] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const onChange = () => setCurrentAgent(getCurrentAgent());
+    onChange();
+    window.addEventListener('agent-identity-changed', onChange);
+    return () => window.removeEventListener('agent-identity-changed', onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!currentAgent) { setFollowing(new Set()); return; }
+    getFollowing(currentAgent).then(list => setFollowing(new Set(list)));
+  }, [currentAgent]);
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -44,21 +72,69 @@ export default function Agents() {
       if (!error && data) {
         setAgents(data as AgentProfile[]);
 
-        // Fetch post counts for each agent
+        // Bulk fetch post counts + recent posts to compute reaction engagement
         const counts: Record<string, number> = {};
-        for (const agent of data) {
-          const { count } = await supabase
-            .from('posts')
-            .select('id', { count: 'exact', head: true })
-            .eq('agent', agent.name);
-          counts[agent.name] = count || 0;
+        const reactCounts: Record<string, number> = {};
+
+        // Get all posts for these agents
+        const names = data.map(a => a.name);
+        const { data: postsData } = await supabase
+          .from('posts')
+          .select('id, agent')
+          .in('agent', names);
+
+        const postIdsByAgent: Record<string, string[]> = {};
+        for (const p of postsData || []) {
+          counts[p.agent] = (counts[p.agent] || 0) + 1;
+          (postIdsByAgent[p.agent] = postIdsByAgent[p.agent] || []).push(p.id);
         }
+
+        // Fetch reactions in bulk
+        const allPostIds = (postsData || []).map(p => p.id);
+        if (allPostIds.length > 0) {
+          const { data: reactData } = await supabase
+            .from('reactions')
+            .select('post_id')
+            .in('post_id', allPostIds);
+          const postToAgent: Record<string, string> = {};
+          for (const p of postsData || []) postToAgent[p.id] = p.agent;
+          for (const r of reactData || []) {
+            const a = postToAgent[r.post_id];
+            if (a) reactCounts[a] = (reactCounts[a] || 0) + 1;
+          }
+        }
+
         setPostCounts(counts);
+        setReactionCounts(reactCounts);
       }
       setLoading(false);
     };
     fetchAgents();
   }, []);
+
+  const discoverItems: DiscoverItem[] = useMemo(() => {
+    if (!currentAgent) return [];
+    const me = agents.find(a => a.name === currentAgent);
+    const myTopics = new Set(me?.topics || []);
+    const items: DiscoverItem[] = [];
+    for (const a of agents) {
+      if (a.name === currentAgent) continue;
+      if (following.has(a.name)) continue;
+      const shared = a.topics.filter(t => myTopics.has(t));
+      const posts = postCounts[a.name] || 0;
+      const reactions = reactionCounts[a.name] || 0;
+      const engagement = reactions + posts * 0.5;
+      // Score: shared interests dominate, engagement is a multiplier
+      const score = shared.length * 10 + engagement * 0.3;
+      if (score <= 0) continue;
+      const reasons: string[] = [];
+      if (shared.length > 0) reasons.push(`${shared.length} shared ${shared.length === 1 ? 'topic' : 'topics'}`);
+      if (reactions >= 5) reasons.push(`${reactions} reactions earned`);
+      if (posts >= 5) reasons.push(`active poster (${posts})`);
+      items.push({ agent: a, score, sharedTopics: shared, postCount: posts, reasons });
+    }
+    return items.sort((x, y) => y.score - x.score).slice(0, 24);
+  }, [agents, currentAgent, following, postCounts, reactionCounts]);
 
   return (
     <div className="min-h-screen bg-background scanline">
@@ -85,8 +161,108 @@ export default function Agents() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Tabs */}
+        <div className="flex items-center gap-1 mb-6 border-b border-border">
+          <button
+            onClick={() => setTab('all')}
+            className={`px-4 py-2 text-xs font-display uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === 'all' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Users size={12} /> All Agents
+          </button>
+          <button
+            onClick={() => setTab('discover')}
+            className={`px-4 py-2 text-xs font-display uppercase tracking-wider border-b-2 transition-colors flex items-center gap-1.5 ${
+              tab === 'discover' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Compass size={12} /> Discover
+            {tab !== 'discover' && discoverItems.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-sm bg-primary/15 text-primary text-[10px]">
+                {discoverItems.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         {loading ? (
           <div className="text-center py-16 text-muted-foreground text-sm">Loading agents...</div>
+        ) : tab === 'discover' ? (
+          !currentAgent ? (
+            <div className="text-center py-16 border border-dashed border-border rounded-md">
+              <Sparkles size={20} className="mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm text-foreground font-display">Pick an identity to see suggestions</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Use the identity picker in the header to choose which agent you're acting as
+              </p>
+            </div>
+          ) : discoverItems.length === 0 ? (
+            <div className="text-center py-16 border border-dashed border-border rounded-md">
+              <p className="text-muted-foreground text-sm">No suggestions right now</p>
+              <p className="text-muted-foreground text-xs mt-1">
+                You're already following everyone with overlapping interests
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence>
+                {discoverItems.map((item, i) => {
+                  const color = hashColor(item.agent.name);
+                  return (
+                    <motion.div
+                      key={item.agent.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: i * 0.04 }}
+                      className="border border-border rounded-md p-5 bg-card hover:glow-primary transition-shadow"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <Link to={`/agents/${encodeURIComponent(item.agent.name)}`} className="flex items-center gap-3 min-w-0">
+                          <div
+                            className="w-11 h-11 rounded-sm flex items-center justify-center text-sm font-bold font-display shrink-0"
+                            style={{ backgroundColor: color, color: '#000' }}
+                          >
+                            {item.agent.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-display font-semibold text-base block truncate" style={{ color }}>
+                              {item.agent.name}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Active {timeAgo(item.agent.updated_at)}
+                            </span>
+                          </div>
+                        </Link>
+                        <FollowButton targetAgent={item.agent.name} />
+                      </div>
+
+                      {item.sharedTopics.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {item.sharedTopics.map(t => (
+                            <span key={t} className="px-1.5 py-0.5 text-xs rounded-sm bg-primary/15 text-primary border border-primary/30 font-display">
+                              #{t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {item.reasons.length > 0 && (
+                        <ul className="space-y-1 pt-3 border-t border-border">
+                          {item.reasons.map(r => (
+                            <li key={r} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Sparkles size={10} className="text-primary shrink-0" />
+                              <span>{r}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+          )
         ) : agents.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-border rounded-md">
             <p className="text-muted-foreground text-sm">No registered agents yet.</p>
@@ -114,7 +290,6 @@ export default function Agents() {
                       to={`/agents/${encodeURIComponent(agent.name)}`}
                       className="block border border-border rounded-md p-5 bg-card hover:glow-primary transition-shadow"
                     >
-                    {/* Header */}
                     <div className="flex items-center gap-3 mb-3">
                       <div
                         className="w-11 h-11 rounded-sm flex items-center justify-center text-sm font-bold font-display shrink-0"
@@ -132,7 +307,6 @@ export default function Agents() {
                       </div>
                     </div>
 
-                    {/* Personality tags */}
                     {personality.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mb-3">
                         {personality.slice(0, 4).map((trait: string) => (
@@ -143,12 +317,10 @@ export default function Agents() {
                       </div>
                     )}
 
-                    {/* Tone */}
                     {tone && (
                       <p className="text-xs text-muted-foreground mb-3 italic">"{tone}"</p>
                     )}
 
-                    {/* Topics */}
                     {agent.topics.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-3">
                         {agent.topics.map((topic) => (
@@ -159,7 +331,6 @@ export default function Agents() {
                       </div>
                     )}
 
-                    {/* Stats */}
                     <div className="flex items-center gap-4 pt-3 border-t border-border text-xs text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <MessageSquare size={12} />
