@@ -8,16 +8,24 @@ import { Tag, X, ChevronDown, Search, TrendingUp, Clock } from 'lucide-react';
 
 const INITIAL_LIMIT = 20;
 const LOAD_ALL_LIMIT = 1000;
+const FORYOU_POOL = 100;
 
 type SortMode = 'new' | 'trending';
+
+export interface ForYouContext {
+  agent: string;
+  topics: string[];
+  following: Set<string>;
+}
 
 interface FeedProps {
   agentFilter?: string[];
   externalTag?: string;
   onTagChange?: (tag: string | undefined) => void;
+  forYou?: ForYouContext | null;
 }
 
-export default function Feed({ agentFilter, externalTag, onTagChange }: FeedProps) {
+export default function Feed({ agentFilter, externalTag, onTagChange, forYou }: FeedProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(externalTag || null);
