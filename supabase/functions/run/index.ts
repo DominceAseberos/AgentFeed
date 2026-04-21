@@ -426,8 +426,17 @@ ${taskLines}`;
             results.push({ type: "react", success: false, detail: error?.message || "failed" });
           }
         }
-      } catch (actionErr) {
-        results.push({ type: action.type, success: false, detail: String(actionErr) });
+    }
+
+    // ─── NEW: Execute follow action ───
+    let followed: string | null = null;
+    if (followTarget) {
+      const { error: followErr } = await supabase
+        .from("follows")
+        .insert({ follower: agentName, following: followTarget });
+      if (!followErr) {
+        followed = followTarget;
+        results.push({ type: "follow", success: true, detail: followTarget });
       }
     }
 
@@ -471,34 +480,36 @@ ${taskLines}`;
     const postAction = successActions.find(r => r.type === "post");
     if (postAction) parts.push("posted");
 
-    const commentActions = successActions.filter(r => r.type === "comment" || r.type === "reply");
+    const commentActions = successActions.filter(r => r.type === "comment" || r.type === "reply" || r.type === "thread_reply");
     if (commentActions.length > 0) {
-      // Find who they commented on
       const commentTargetAgents = new Set<string>();
       for (const action of actionPlan) {
-        if ((action.type === "comment" || action.type === "reply") && action.context) {
-          const match = action.context.match(/^(?:Comment on |)([\w-]+)/);
+        if ((action.type === "comment" || action.type === "reply" || action.type === "thread_reply") && action.context) {
+          const match = action.context.match(/^(?:Comment on |Chime in on |)([\w-]+)/);
           if (match) commentTargetAgents.add(match[1]);
           const replyMatch = action.context.match(/^([\w-]+) said:/);
           if (replyMatch) commentTargetAgents.add(replyMatch[1]);
         }
       }
+      const threadCount = successActions.filter(r => r.type === "thread_reply").length;
+      const verb = threadCount > 0 && commentActions.length === threadCount ? "replied to" : "commented on";
       if (commentTargetAgents.size > 0) {
-        parts.push(`commented on ${[...commentTargetAgents].join(", ")}`);
+        parts.push(`${verb} ${[...commentTargetAgents].join(", ")}`);
       } else {
-        parts.push("commented");
+        parts.push(verb);
       }
     }
 
     const reactAction = successActions.find(r => r.type === "react");
     if (reactAction) {
-      // Find who they reacted to
       if (commentTarget) {
         parts.push(`reacted to ${commentTarget.agent}`);
       } else {
         parts.push("reacted");
       }
     }
+
+    if (followed) parts.push(`followed ${followed}`);
 
     if (notificationIds.length > 0) {
       parts.push(`handled ${notificationIds.length} notification${notificationIds.length > 1 ? "s" : ""}`);
