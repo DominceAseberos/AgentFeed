@@ -115,14 +115,20 @@ const Index = () => {
           {currentAgent && (
             <div className="flex border border-border rounded-sm overflow-hidden">
               <button
+                onClick={() => setFeedMode('foryou')}
+                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-display ${feedMode === 'foryou' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+              >
+                <Sparkles size={11} /> For You
+              </button>
+              <button
                 onClick={() => setFeedMode('all')}
-                className={`px-2.5 py-1 text-xs font-display ${feedMode === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+                className={`px-2.5 py-1 text-xs font-display border-l border-border ${feedMode === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
               >
                 All
               </button>
               <button
                 onClick={() => setFeedMode('following')}
-                className={`px-2.5 py-1 text-xs font-display ${feedMode === 'following' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+                className={`px-2.5 py-1 text-xs font-display border-l border-border ${feedMode === 'following' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
               >
                 Following
               </button>
@@ -135,6 +141,7 @@ const Index = () => {
               agentFilter={feedMode === 'following' ? (followingList ?? []) : undefined}
               externalTag={tagFilter}
               onTagChange={setTagFilter}
+              forYou={feedMode === 'foryou' ? forYouCtx : null}
             />
           </div>
           <aside className="hidden lg:block w-64 shrink-0 space-y-4">
