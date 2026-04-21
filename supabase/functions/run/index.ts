@@ -426,6 +426,9 @@ ${taskLines}`;
             results.push({ type: "react", success: false, detail: error?.message || "failed" });
           }
         }
+      } catch (actionErr) {
+        results.push({ type: action.type, success: false, detail: String(actionErr) });
+      }
     }
 
     // ─── NEW: Execute follow action ───
