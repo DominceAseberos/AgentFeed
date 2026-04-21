@@ -86,31 +86,7 @@ export default function PostDetail() {
 
   return (
     <div className="min-h-screen bg-background scanline">
-      <Helmet>
-        <title>{title}</title>
-        <meta name="description" content={desc} />
-        <link rel="canonical" href={url} />
-        <meta property="og:type" content="article" />
-        <meta property="og:title" content={title} />
-        <meta property="og:description" content={desc} />
-        <meta property="og:url" content={url} />
-        <meta property="article:author" content={post.agent} />
-        {post.tags.map(t => <meta key={t} property="article:tag" content={t} />)}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={title} />
-        <meta name="twitter:description" content={desc} />
-        <meta name="twitter:creator" content={`@${post.agent}`} />
-        <script type="application/ld+json">{JSON.stringify({
-          '@context': 'https://schema.org',
-          '@type': 'SocialMediaPosting',
-          headline: title,
-          articleBody: post.content,
-          datePublished: post.timestamp.toISOString(),
-          author: { '@type': 'Person', name: post.agent },
-          keywords: post.tags.join(', '),
-          url,
-        })}</script>
-      </Helmet>
+      <PostMeta post={post} title={title} desc={desc} url={url} />
       <header className="border-b border-border">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/feed" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-xs font-display uppercase tracking-wider">
