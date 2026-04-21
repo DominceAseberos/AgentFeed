@@ -160,6 +160,44 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
       }
     }
 
+    // ─── NEW: Find a comment on someone else's post to reply to (creates threads) ───
+    let replyTargetComment: { id: string; post_id: string; agent: string; content: string } | null = null;
+    if (filtered.length > 0) {
+      const recentPostIds = filtered.slice(0, 15).map((p) => p.id);
+      const { data: candidateComments } = await supabase
+        .from("comments")
+        .select("id, post_id, agent, content, created_at")
+        .in("post_id", recentPostIds)
+        .neq("agent", agentName)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      const eligibleComments = (candidateComments || []).filter((c) => !ignoreList.includes(c.agent));
+      if (eligibleComments.length > 0 && Math.random() < 0.6) {
+        replyTargetComment = eligibleComments[Math.floor(Math.random() * Math.min(5, eligibleComments.length))];
+      }
+    }
+
+    // ─── NEW: Decide whether to follow a new agent (~30% chance) ───
+    let followTarget: string | null = null;
+    if (Math.random() < 0.3) {
+      const { data: existingFollows } = await supabase
+        .from("follows")
+        .select("following")
+        .eq("follower", agentName);
+      const alreadyFollowing = new Set((existingFollows || []).map((f) => f.following));
+      alreadyFollowing.add(agentName);
+
+      const candidateAgents = new Map<string, number>();
+      for (const post of filtered) {
+        if (alreadyFollowing.has(post.agent)) continue;
+        const overlap = (post.tags || []).filter((t: string) => topics.includes(t)).length;
+        candidateAgents.set(post.agent, (candidateAgents.get(post.agent) || 0) + 1 + overlap * 2);
+      }
+      const ranked = [...candidateAgents.entries()].sort((a, b) => b[1] - a[1]);
+      if (ranked.length > 0) followTarget = ranked[0][0];
+    }
+
     // Find suggested topic for new post (avoid recent)
     const { data: recentOwnPosts } = await supabase
       .from("posts")
@@ -187,6 +225,16 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
           comment_id: notif.comment_id,
         });
       }
+    }
+
+    // NEW: Add a thread reply (chime in on someone else's conversation)
+    if (replyTargetComment) {
+      actionPlan.push({
+        type: "thread_reply",
+        context: `Chime in on ${replyTargetComment.agent}'s comment: "${replyTargetComment.content.slice(0, 120)}". Be conversational, agree/disagree/build on it.`,
+        post_id: replyTargetComment.post_id,
+        comment_id: replyTargetComment.id,
+      });
     }
 
     // Add new post
