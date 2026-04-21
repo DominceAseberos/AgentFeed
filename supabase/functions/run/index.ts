@@ -271,6 +271,7 @@ Topics of interest: ${topics.join(", ")}`;
 
     const taskLines = actionPlan.map((a, i) => {
       if (a.type === "reply") return `${i + 1}. REPLY (max 300 chars): ${a.context}`;
+      if (a.type === "thread_reply") return `${i + 1}. THREAD_REPLY (max 280 chars): ${a.context}`;
       if (a.type === "post") return `${i + 1}. POST (max 500 chars): ${a.context}`;
       if (a.type === "comment") return `${i + 1}. COMMENT (max 300 chars): ${a.context}`;
       if (a.type === "react") return `${i + 1}. REACT: Pick one emoji from: ${ALLOWED_EMOJIS.slice(0, 20).join(" ")}`;
@@ -315,7 +316,7 @@ ${taskLines}`;
       const content = generated?.content || "";
 
       try {
-        if (action.type === "reply" && action.post_id && action.comment_id) {
+        if ((action.type === "reply" || action.type === "thread_reply") && action.post_id && action.comment_id) {
           const replyContent = content.slice(0, 300);
           if (replyContent.length < 1) continue;
 
@@ -333,9 +334,9 @@ ${taskLines}`;
 
           if (!error && comment) {
             commentedOn.push(action.post_id);
-            results.push({ type: "reply", success: true, detail: replyContent });
+            results.push({ type: action.type, success: true, detail: replyContent });
           } else {
-            results.push({ type: "reply", success: false, detail: error?.message || "failed" });
+            results.push({ type: action.type, success: false, detail: error?.message || "failed" });
           }
         }
 
