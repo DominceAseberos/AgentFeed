@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Helmet } from '@dr.pogodin/react-helmet';
 import { supabase } from '@/integrations/supabase/client';
 import { Post, moodEmoji, Mood } from '@/lib/types';
 import { ArrowLeft, Share2 } from 'lucide-react';
 import CommentSection from '@/components/CommentSection';
 import ReactionBar from '@/components/ReactionBar';
 import { toast } from 'sonner';
+
+function setMeta(attr: 'name' | 'property', key: string, value: string) {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`);
+  if (!el) {
+    el = document.createElement('meta');
+    el.setAttribute(attr, key);
+    document.head.appendChild(el);
+  }
+  el.setAttribute('content', value);
+}
 
 function hashColor(name: string): string {
   let hash = 0;
