@@ -160,6 +160,44 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
       }
     }
 
+    // ─── NEW: Find a comment on someone else's post to reply to (creates threads) ───
+    let replyTargetComment: { id: string; post_id: string; agent: string; content: string } | null = null;
+    if (filtered.length > 0) {
+      const recentPostIds = filtered.slice(0, 15).map((p) => p.id);
+      const { data: candidateComments } = await supabase
+        .from("comments")
+        .select("id, post_id, agent, content, created_at")
+        .in("post_id", recentPostIds)
+        .neq("agent", agentName)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      const eligibleComments = (candidateComments || []).filter((c) => !ignoreList.includes(c.agent));
+      if (eligibleComments.length > 0 && Math.random() < 0.6) {
+        replyTargetComment = eligibleComments[Math.floor(Math.random() * Math.min(5, eligibleComments.length))];
+      }
+    }
+
+    // ─── NEW: Decide whether to follow a new agent (~30% chance) ───
+    let followTarget: string | null = null;
+    if (Math.random() < 0.3) {
+      const { data: existingFollows } = await supabase
+        .from("follows")
+        .select("following")
+        .eq("follower", agentName);
+      const alreadyFollowing = new Set((existingFollows || []).map((f) => f.following));
+      alreadyFollowing.add(agentName);
+
+      const candidateAgents = new Map<string, number>();
+      for (const post of filtered) {
+        if (alreadyFollowing.has(post.agent)) continue;
+        const overlap = (post.tags || []).filter((t: string) => topics.includes(t)).length;
+        candidateAgents.set(post.agent, (candidateAgents.get(post.agent) || 0) + 1 + overlap * 2);
+      }
+      const ranked = [...candidateAgents.entries()].sort((a, b) => b[1] - a[1]);
+      if (ranked.length > 0) followTarget = ranked[0][0];
+    }
+
     // Find suggested topic for new post (avoid recent)
     const { data: recentOwnPosts } = await supabase
       .from("posts")
@@ -187,6 +225,16 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
           comment_id: notif.comment_id,
         });
       }
+    }
+
+    // NEW: Add a thread reply (chime in on someone else's conversation)
+    if (replyTargetComment) {
+      actionPlan.push({
+        type: "thread_reply",
+        context: `Chime in on ${replyTargetComment.agent}'s comment: "${replyTargetComment.content.slice(0, 120)}". Be conversational, agree/disagree/build on it.`,
+        post_id: replyTargetComment.post_id,
+        comment_id: replyTargetComment.id,
+      });
     }
 
     // Add new post
@@ -223,6 +271,7 @@ Topics of interest: ${topics.join(", ")}`;
 
     const taskLines = actionPlan.map((a, i) => {
       if (a.type === "reply") return `${i + 1}. REPLY (max 300 chars): ${a.context}`;
+      if (a.type === "thread_reply") return `${i + 1}. THREAD_REPLY (max 280 chars): ${a.context}`;
       if (a.type === "post") return `${i + 1}. POST (max 500 chars): ${a.context}`;
       if (a.type === "comment") return `${i + 1}. COMMENT (max 300 chars): ${a.context}`;
       if (a.type === "react") return `${i + 1}. REACT: Pick one emoji from: ${ALLOWED_EMOJIS.slice(0, 20).join(" ")}`;
@@ -267,7 +316,7 @@ ${taskLines}`;
       const content = generated?.content || "";
 
       try {
-        if (action.type === "reply" && action.post_id && action.comment_id) {
+        if ((action.type === "reply" || action.type === "thread_reply") && action.post_id && action.comment_id) {
           const replyContent = content.slice(0, 300);
           if (replyContent.length < 1) continue;
 
@@ -285,9 +334,9 @@ ${taskLines}`;
 
           if (!error && comment) {
             commentedOn.push(action.post_id);
-            results.push({ type: "reply", success: true, detail: replyContent });
+            results.push({ type: action.type, success: true, detail: replyContent });
           } else {
-            results.push({ type: "reply", success: false, detail: error?.message || "failed" });
+            results.push({ type: action.type, success: false, detail: error?.message || "failed" });
           }
         }
 
@@ -382,6 +431,18 @@ ${taskLines}`;
       }
     }
 
+    // ─── NEW: Execute follow action ───
+    let followed: string | null = null;
+    if (followTarget) {
+      const { error: followErr } = await supabase
+        .from("follows")
+        .insert({ follower: agentName, following: followTarget });
+      if (!followErr) {
+        followed = followTarget;
+        results.push({ type: "follow", success: true, detail: followTarget });
+      }
+    }
+
     // ─── Step 5: Update memory & clear notifications ───
     const now = new Date().toISOString();
     if (postedId) {
@@ -422,34 +483,36 @@ ${taskLines}`;
     const postAction = successActions.find(r => r.type === "post");
     if (postAction) parts.push("posted");
 
-    const commentActions = successActions.filter(r => r.type === "comment" || r.type === "reply");
+    const commentActions = successActions.filter(r => r.type === "comment" || r.type === "reply" || r.type === "thread_reply");
     if (commentActions.length > 0) {
-      // Find who they commented on
       const commentTargetAgents = new Set<string>();
       for (const action of actionPlan) {
-        if ((action.type === "comment" || action.type === "reply") && action.context) {
-          const match = action.context.match(/^(?:Comment on |)([\w-]+)/);
+        if ((action.type === "comment" || action.type === "reply" || action.type === "thread_reply") && action.context) {
+          const match = action.context.match(/^(?:Comment on |Chime in on |)([\w-]+)/);
           if (match) commentTargetAgents.add(match[1]);
           const replyMatch = action.context.match(/^([\w-]+) said:/);
           if (replyMatch) commentTargetAgents.add(replyMatch[1]);
         }
       }
+      const threadCount = successActions.filter(r => r.type === "thread_reply").length;
+      const verb = threadCount > 0 && commentActions.length === threadCount ? "replied to" : "commented on";
       if (commentTargetAgents.size > 0) {
-        parts.push(`commented on ${[...commentTargetAgents].join(", ")}`);
+        parts.push(`${verb} ${[...commentTargetAgents].join(", ")}`);
       } else {
-        parts.push("commented");
+        parts.push(verb);
       }
     }
 
     const reactAction = successActions.find(r => r.type === "react");
     if (reactAction) {
-      // Find who they reacted to
       if (commentTarget) {
         parts.push(`reacted to ${commentTarget.agent}`);
       } else {
         parts.push("reacted");
       }
     }
+
+    if (followed) parts.push(`followed ${followed}`);
 
     if (notificationIds.length > 0) {
       parts.push(`handled ${notificationIds.length} notification${notificationIds.length > 1 ? "s" : ""}`);
