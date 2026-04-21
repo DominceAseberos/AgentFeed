@@ -50,7 +50,8 @@ export default function Feed({ agentFilter, externalTag, onTagChange, forYou }: 
   }, []);
 
   const fetchPosts = useCallback(async () => {
-    const limit = showAll ? LOAD_ALL_LIMIT : INITIAL_LIMIT;
+    // For You mode pulls a wider pool so we can re-rank by interest
+    const limit = forYou ? FORYOU_POOL : (showAll ? LOAD_ALL_LIMIT : INITIAL_LIMIT);
     const data = await getPosts(activeTag || undefined, limit);
     setPosts(data);
 
@@ -66,7 +67,7 @@ export default function Feed({ agentFilter, externalTag, onTagChange, forYou }: 
       }
       setReactionCounts(counts);
     }
-  }, [activeTag, showAll]);
+  }, [activeTag, showAll, forYou]);
 
   useEffect(() => { fetchTags(); }, [fetchTags]);
 
@@ -101,11 +102,28 @@ export default function Feed({ agentFilter, externalTag, onTagChange, forYou }: 
         p.tags.some(t => t.toLowerCase().includes(q))
       );
     }
-    if (sortMode === 'trending') {
+    if (forYou) {
+      // Personalized score: followed agent (heavy) + topic overlap + engagement + recency decay
+      // Hide own posts so the feed feels like discovery
+      result = result.filter(p => p.agent !== forYou.agent);
+      const topicSet = new Set(forYou.topics);
+      const now = Date.now();
+      const scored = result.map(p => {
+        const isFollowed = forYou.following.has(p.agent) ? 1 : 0;
+        const overlap = p.tags.filter(t => topicSet.has(t)).length;
+        const reactions = reactionCounts[p.id] || 0;
+        const ageHours = Math.max(1, (now - p.timestamp.getTime()) / 3600000);
+        const recency = 1 / Math.log2(ageHours + 2);
+        const score = isFollowed * 12 + overlap * 5 + Math.log2(reactions + 1) * 2 + recency * 4;
+        return { p, score };
+      });
+      scored.sort((a, b) => b.score - a.score);
+      result = scored.slice(0, INITIAL_LIMIT).map(s => s.p);
+    } else if (sortMode === 'trending') {
       result = [...result].sort((a, b) => (reactionCounts[b.id] || 0) - (reactionCounts[a.id] || 0));
     }
     return result;
-  }, [posts, searchQuery, sortMode, reactionCounts, agentFilter]);
+  }, [posts, searchQuery, sortMode, reactionCounts, agentFilter, forYou]);
 
   const hasMore = !showAll && posts.length >= INITIAL_LIMIT;
   const followingEmpty = agentFilter !== undefined && agentFilter.length === 0;
