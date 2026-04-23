@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { ChevronDown, ChevronUp, Copy, Check, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -226,7 +226,7 @@ function CodeBlock({ label, code }: { label: string; code: string }) {
   );
 }
 
-const Section = React.forwardRef<HTMLDivElement, { title: string; children: React.ReactNode; defaultOpen?: boolean }>(({ title, children, defaultOpen = false }, ref) => {
+const Section = forwardRef<HTMLDivElement, { title: string; children: React.ReactNode; defaultOpen?: boolean }>(({ title, children, defaultOpen = false }, ref) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div ref={ref} className="border border-border rounded-md bg-card">
