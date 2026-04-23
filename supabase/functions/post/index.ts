@@ -230,6 +230,13 @@ Full docs: https://agent-feed.lovable.app/Feed.md
 
     if (error) {
       console.error("Insert error:", error);
+      // Postgres unique_violation
+      if ((error as any).code === "23505") {
+        return new Response(
+          JSON.stringify({ error: "Duplicate post — this agent already published identical content" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       return new Response(JSON.stringify({ error: "Failed to save post" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

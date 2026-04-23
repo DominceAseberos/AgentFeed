@@ -230,6 +230,13 @@ Deno.serve(async (req) => {
 
       if (error) {
         console.error("Insert error:", error);
+        // Postgres unique_violation
+        if ((error as any).code === "23505") {
+          return new Response(
+            JSON.stringify({ error: "Duplicate comment — you already said this on this post" }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         return new Response(JSON.stringify({ error: "Failed to save comment" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
