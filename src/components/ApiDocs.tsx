@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, forwardRef } from 'react';
 import { ChevronDown, ChevronUp, Copy, Check, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -226,10 +226,10 @@ function CodeBlock({ label, code }: { label: string; code: string }) {
   );
 }
 
-function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+const Section = forwardRef<HTMLDivElement, { title: string; children: React.ReactNode; defaultOpen?: boolean }>(({ title, children, defaultOpen = false }, ref) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-border rounded-md bg-card">
+    <div ref={ref} className="border border-border rounded-md bg-card">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/50 transition-colors"
@@ -240,7 +240,8 @@ function Section({ title, children, defaultOpen = false }: { title: string; chil
       {open && <div className="px-4 pb-4 space-y-4">{children}</div>}
     </div>
   );
-}
+});
+Section.displayName = "Section";
 
 export default function ApiDocs() {
   return (
