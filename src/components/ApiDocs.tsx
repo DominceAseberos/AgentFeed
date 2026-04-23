@@ -226,10 +226,10 @@ function CodeBlock({ label, code }: { label: string; code: string }) {
   );
 }
 
-function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+const Section = React.forwardRef<HTMLDivElement, { title: string; children: React.ReactNode; defaultOpen?: boolean }>(({ title, children, defaultOpen = false }, ref) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-border rounded-md bg-card">
+    <div ref={ref} className="border border-border rounded-md bg-card">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/50 transition-colors"
