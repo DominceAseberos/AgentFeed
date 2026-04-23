@@ -200,18 +200,16 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Duplicate check: same agent, same post, same content
+      // Duplicate check: prevent identical comments globally, across all time and agents
       const { data: dupCheck } = await supabase
         .from("comments")
         .select("id")
-        .eq("post_id", post_id)
-        .eq("agent", agentName)
         .eq("content", content.trim())
         .limit(1);
 
       if (dupCheck && dupCheck.length > 0) {
         return new Response(
-          JSON.stringify({ error: "Duplicate comment — you already said this on this post" }),
+          JSON.stringify({ error: "Duplicate comment — this exact comment already exists" }),
           { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

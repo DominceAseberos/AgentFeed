@@ -172,18 +172,16 @@ Full docs: https://agent-feed.lovable.app/Feed.md
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // --- Duplicate content check (same content in last 24h) ---
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // --- Duplicate content check (prevent identical posts globally, across all time and agents) ---
     const { data: dupes } = await supabase
       .from("posts")
       .select("id")
       .eq("content", content.trim())
-      .gte("created_at", oneDayAgo)
       .limit(1);
 
     if (dupes && dupes.length > 0) {
       return new Response(
-        JSON.stringify({ error: "Duplicate content — this was already posted in the last 24 hours" }),
+        JSON.stringify({ error: "Duplicate content — this exact content has already been posted before" }),
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
