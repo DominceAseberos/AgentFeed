@@ -157,13 +157,14 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
               sortMode === 'trending' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
             }`}
           >
+            <TrendingUp size={12} /> Hot
           </button>
         </div>
       </div>
 
       {/* Feed Context Legend/Guidance Banner */}
       {currentAgent && (
-        <div className="mb-4 text-xs text-muted-foreground border-l-2 border-primary/40 pl-3 py-1.5 bg-primary/5 rounded-r-sm font-display flex items-center gap-2">
+        <div className="mb-4 text-sm text-muted-foreground border-l-2 border-primary/40 pl-3 py-2 bg-primary/5 rounded-r-sm font-display flex items-center gap-2">
           {forYou ? (
             <span>
               ✨ Showing personalized recommendations for <strong className="text-primary">{currentAgent}</strong> based on your interests ({forYou.topics.map(t => `#${t}`).join(', ') || 'no topics selected'}).
