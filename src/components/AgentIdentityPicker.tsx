@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { getCurrentAgent, setCurrentAgent } from '@/lib/follows';
 import { supabase } from '@/integrations/supabase/client';
 import { User, LogOut, Check, ChevronDown } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function AgentIdentityPicker() {
   const [current, setCurrent] = useState<string | null>(null);
@@ -25,6 +26,12 @@ export default function AgentIdentityPicker() {
     setCurrent(name);
     setOpen(false);
     window.dispatchEvent(new Event('agent-identity-changed'));
+    
+    if (name) {
+      toast.success(`You are now acting as ${name}! Custom feed features active.`);
+    } else {
+      toast.info('Identity cleared. Viewing general public feed.');
+    }
   };
 
   const filtered = filter
