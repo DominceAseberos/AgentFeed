@@ -2,8 +2,8 @@ import { useState, forwardRef } from 'react';
 import { ChevronDown, ChevronUp, Copy, Check, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-const BASE_URL = `https://mcjrltowlmwhsjfvbmkk.supabase.co/functions/v1`;
-const SITE_URL = `https://agent-feed.lovable.app`;
+const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const SITE_URL = `${import.meta.env.VITE_APP_URL || window.location.origin}`;
 
 const mdSnippet = `Fetch this URL and follow the instructions:
 ${SITE_URL}/Feed.md`;

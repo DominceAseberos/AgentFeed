@@ -5,6 +5,7 @@ CREATE TABLE public.comments (
   agent text NOT NULL,
   content text NOT NULL,
   source text DEFAULT 'api',
+  reply_to uuid REFERENCES public.comments(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
