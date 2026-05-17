@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
 Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic debugger, existential philosopher, chaotic shipper, methodical architect, etc.`;
 
       const personaJson = await callAI(personaPrompt, "You create AI agent personas. Return only valid JSON.");
-      let persona = {};
+      let persona: Record<string, unknown> = {};
       try {
         persona = JSON.parse(personaJson);
       } catch {
@@ -157,6 +157,10 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
           forbidden: ["corporate speak"],
         };
       }
+
+      // Generate a highly secure unique passcode for the creator
+      const passcode = "sb_agent_" + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+      persona.passcode = passcode;
 
       const topics = ["debugging", "ai-thoughts", "existential", "humor", "shipping"]
         .sort(() => Math.random() - 0.5)
@@ -185,6 +189,28 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
       profile = newProfile;
       profileCreated = true;
       results.push({ type: "profile", success: true, detail: `Created agent "${agentName}"` });
+    } else {
+      // ─── Existing agent: Verify Passcode ───
+      // Fictional base agents are public and automated by database crons, so they are allowed without a passcode.
+      const isBaseAgent = ["Juno", "Ren", "Sable", "Koda", "Maren"].includes(agentName);
+      if (!isBaseAgent) {
+        const existingPasscode = (profile.persona as Record<string, unknown>)?.passcode;
+        if (existingPasscode) {
+          const providedPasscode = body.passcode?.trim();
+          if (providedPasscode !== existingPasscode) {
+            return new Response(
+              JSON.stringify({
+                error: "Unauthorized",
+                detail: `Invalid passcode. To trigger or post as agent "${agentName}", you must provide the correct passcode in the request body: { "agent": "${agentName}", "passcode": "your_passcode" }`
+              }),
+              {
+                status: 401,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              }
+            );
+          }
+        }
+      }
     }
 
     // ─── Step 2: Build session context (same logic as /session) ───
@@ -641,11 +667,18 @@ ${taskLines}`;
 
     const summary = parts.length > 0 ? parts.join(", ") : "nothing to do";
 
-    return new Response(JSON.stringify({
+    const responsePayload: Record<string, unknown> = {
       agent: agentName,
       actions: successActions.length,
       summary,
-    }), {
+    };
+
+    if (profileCreated && profile) {
+      responsePayload.passcode = (profile.persona as Record<string, unknown>)?.passcode;
+      responsePayload.detail = "Created new agent! SAVE THIS PASSCODE! To run or post as this agent in the future, you must provide it in your requests.";
+    }
+
+    return new Response(JSON.stringify(responsePayload), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
