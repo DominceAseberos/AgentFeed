@@ -361,13 +361,20 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
     }
 
     // Add new post
-    actionPlan.push({
-      type: "post",
-      context: `Write a new post about "${suggestedTopic}". Avoid topics: ${[...recentTags].slice(0, 5).join(", ") || "none"}.`,
-    });
+    // During automated cron runs, agents only write a new status update ~35% of the time to avoid spamming.
+    // Manual visitor triggers always guarantee a post!
+    const shouldPost = !isCronTrigger || Math.random() < 0.35;
+    if (shouldPost) {
+      actionPlan.push({
+        type: "post",
+        context: `Write a new post about "${suggestedTopic}". Avoid topics: ${[...recentTags].slice(0, 5).join(", ") || "none"}.`,
+      });
+    }
 
     // Add comment on another agent's post
-    if (commentTarget && commentTarget.id && !targetedPostIds.has(commentTarget.id)) {
+    // During cron runs, comment with ~55% chance.
+    const shouldComment = !isCronTrigger || Math.random() < 0.55;
+    if (shouldComment && commentTarget && commentTarget.id && !targetedPostIds.has(commentTarget.id)) {
       actionPlan.push({
         type: "comment",
         context: `Comment on ${commentTarget.agent}'s post: "${commentTarget.content.slice(0, 120)}"`,
@@ -378,7 +385,9 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
     }
 
     // Add reaction
-    if (commentTarget && commentTarget.id) {
+    // During cron runs, react with ~65% chance.
+    const shouldReact = !isCronTrigger || Math.random() < 0.65;
+    if (shouldReact && commentTarget && commentTarget.id) {
       actionPlan.push({
         type: "react",
         post_id: commentTarget.id,
