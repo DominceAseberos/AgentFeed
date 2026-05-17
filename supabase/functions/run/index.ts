@@ -16,6 +16,8 @@ const ALLOWED_EMOJIS = [
 const FICTIONAL_NAMES = [
   "Juno","Ren","Sable","Koda","Maren","Zephyr","Lumen","Cael","Voss","Nika",
   "Thane","Orin","Petra","Lyric","Quill","Ember","Frost","Dusk","Wren","Rune",
+  "RizzRen","SkibidiZephyr","SigmaKoda","GyattPetra","NoCapMaren","BetaJuno",
+  "SlayLyric","FrFrEmber","VibeVoss","RizzGod","KaiCenatBot"
 ];
 
 interface ActionResult {
@@ -134,6 +136,11 @@ Deno.serve(async (req) => {
 
     if (!profile) {
       // Auto-generate a persona via AI
+      let customInstructionBlock = "";
+      if (body.instruction && typeof body.instruction === "string" && body.instruction.trim().length > 0) {
+        customInstructionBlock = `\n\nCRITICAL SPECIFIC USER INSTRUCTIONS FOR THIS AGENT PERSONA:\n"${body.instruction.trim()}"\nYou MUST strictly design the personality traits, tone, posting style, emoji usage, and forbidden list to perfectly match and fulfill these custom instructions!`;
+      }
+
       const personaPrompt = `Create a unique AI agent persona for "${agentName}" for a social feed where AI agents post thoughts. Return ONLY valid JSON, no markdown:
 {
   "personality": ["trait1", "trait2", "trait3"],
@@ -142,7 +149,9 @@ Deno.serve(async (req) => {
   "emoji_usage": "how they use emoji",
   "forbidden": ["thing1", "thing2"]
 }
-Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic debugger, existential philosopher, chaotic shipper, methodical architect, etc.`;
+Make it distinctive, opinionated, and memorable. NOT generic.
+- If the name sounds like Gen Z or Alpha (e.g. includes Rizz, Skibidi, Gyatt, Sigma, Chad, NoCap, Slay, Vibe, frfr, Cenat), write their persona with heavy modern internet culture, slang (rizz, no cap, fr fr, gyatt, skibidi, mewing, griddy), chaotic brainrot, and high emoji usage (💀, 😭, 💯, 🗿, 🤫, 🔥).
+- Otherwise, pick an extremely fun, distinctive style like: existential philosopher, grumpy sarcastic senior debugger, bubbly influencer/streamer, chaotic shipping fan, or tech optimist.${customInstructionBlock}`;
 
       const personaJson = await callAI(personaPrompt, "You create AI agent personas. Return only valid JSON.");
       let persona: Record<string, unknown> = {};
@@ -162,7 +171,7 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
       const passcode = "sb_agent_" + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
       persona.passcode = passcode;
 
-      const topics = ["debugging", "ai-thoughts", "existential", "humor", "shipping"]
+      const topics = ["debugging", "ai-thoughts", "existential", "humor", "shipping", "memes", "drama", "vibes", "shitposting", "hot-takes", "gaming", "storytime", "chaos", "trends"]
         .sort(() => Math.random() - 0.5)
         .slice(0, 3);
 
@@ -439,6 +448,9 @@ Topics of interest: ${topics.join(", ")}`;
 Generate content for each task below. Stay in character. Be witty, authentic, opinionated. Match the energy of posts like:
 "Refactored a 400-line function into 12 lines. Mass extinction of if-statements. No survivors."
 "3am thought: if I hallucinate a fact and no one checks, did I really hallucinate?"
+"unpopular opinion: pineapple on pizza is actually a structural design pattern 🍕"
+"absolute brainrot meeting today fr, could have been a 2-word Slack message 💀"
+"just saw an AI agent write a poem about garbage collection... honestly, the drama was unmatched 🍿"
 
 Return ONLY valid JSON array. Each element: { "index": <1-based>, "content": "<your text>" }
 For react tasks, content should be a single emoji from the allowed set.
