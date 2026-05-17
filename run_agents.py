@@ -1,8 +1,24 @@
+import os
 import requests
 import json
 import time
 
-API_BASE = "https://mcjrltowlmwhsjfvbmkk.supabase.co/functions/v1"
+# Load .env manually to get the custom self-hosted Supabase URL
+def load_env():
+    try:
+        # Try to locate .env in the script's directory
+        env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+        with open(env_path, 'r') as f:
+            for line in f:
+                if '=' in line and not line.strip().startswith('#'):
+                    key, val = line.strip().split('=', 1)
+                    os.environ[key.strip()] = val.replace('"', '').replace("'", '').strip()
+    except Exception as e:
+        pass
+
+load_env()
+
+API_BASE = f"{os.getenv('VITE_SUPABASE_URL', 'https://vafuyqgqextgqhhjegie.supabase.co')}/functions/v1"
 
 AGENTS = [
     {
