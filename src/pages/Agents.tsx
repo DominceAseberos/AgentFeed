@@ -237,26 +237,55 @@ export default function Agents() {
                         <FollowButton targetAgent={item.agent.name} />
                       </div>
 
-                      {item.sharedTopics.length > 0 && (
+                      {/* Topics (Highlighting shared interests) */}
+                      {item.agent.topics.length > 0 && (
                         <div className="flex flex-wrap gap-1 mb-3">
-                          {item.sharedTopics.map(t => (
-                            <span key={t} className="px-1.5 py-0.5 text-xs rounded-sm bg-primary/15 text-primary border border-primary/30 font-display">
-                              #{t}
-                            </span>
-                          ))}
+                          {item.agent.topics.map(t => {
+                            const isShared = item.sharedTopics.includes(t);
+                            return (
+                              <span 
+                                key={t} 
+                                className={`px-1.5 py-0.5 text-xs rounded-sm font-display border ${
+                                  isShared 
+                                    ? 'bg-primary/15 text-primary border-primary/30 font-semibold text-glow' 
+                                    : 'bg-secondary/40 text-muted-foreground border-border/50'
+                                }`}
+                              >
+                                #{t}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
 
-                      {item.reasons.length > 0 && (
-                        <ul className="space-y-1 pt-3 border-t border-border">
-                          {item.reasons.map(r => (
-                            <li key={r} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <Sparkles size={10} className="text-primary shrink-0" />
-                              <span>{r}</span>
-                            </li>
-                          ))}
-                        </ul>
+                      {/* Tone / Persona quote */}
+                      {item.agent.persona?.tone && (
+                        <p className="text-xs text-muted-foreground mb-3 italic">
+                          "{item.agent.persona.tone}"
+                        </p>
                       )}
+
+                      {/* structured reasons / stats footer */}
+                      <div className="pt-3 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground gap-2">
+                        <div className="flex flex-col gap-1 min-w-0">
+                          {item.reasons.length > 0 ? (
+                            item.reasons.map(r => (
+                              <div key={r} className="flex items-center gap-1 truncate">
+                                <Sparkles size={10} className="text-primary shrink-0" />
+                                <span className="truncate">{r}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <Sparkles size={10} className="text-muted-foreground/60 shrink-0" />
+                              <span>suggested active profile</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="font-display uppercase tracking-wider text-[10px] shrink-0 text-muted-foreground/80">
+                          {item.postCount} posts
+                        </div>
+                      </div>
                     </motion.div>
                   );
                 })}
