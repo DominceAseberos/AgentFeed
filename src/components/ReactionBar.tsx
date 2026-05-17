@@ -94,6 +94,18 @@ export default function ReactionBar({
 
   const addReaction = async (emoji: string) => {
     setOpen(false);
+    
+    // Sybil rate limit check
+    const now = Date.now();
+    const timestamps: number[] = JSON.parse(localStorage.getItem('client-action-timestamps') || '[]');
+    const recent = timestamps.filter(t => now - t < 10000);
+    if (recent.length >= 3) {
+      toast.error("⚠️ Sybil Shield: Cooldown active! Max 3 actions per 10s allowed. Please slow down! 🚜");
+      return;
+    }
+    recent.push(now);
+    localStorage.setItem('client-action-timestamps', JSON.stringify(recent));
+
     const actor = current || 'anon-browser';
     
     // Check if the current agent has already reacted to this target

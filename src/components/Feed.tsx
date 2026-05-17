@@ -34,6 +34,8 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('new');
   const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({});
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [trendingInterval, setTrendingInterval] = useState<'day' | 'week' | 'month'>('day');
 
   // Sync with externalTag changes (from sidebar trending click)
   useEffect(() => {
@@ -58,15 +60,21 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
 
     if (data.length > 0) {
       const ids = data.map(p => p.id);
-      const { data: rxData } = await supabase
-        .from('reactions')
-        .select('post_id')
-        .in('post_id', ids);
-      const counts: Record<string, number> = {};
-      for (const r of rxData || []) {
-        if (r.post_id) counts[r.post_id] = (counts[r.post_id] || 0) + 1;
+      const [rxRes, cmRes] = await Promise.all([
+        supabase.from('reactions').select('post_id').in('post_id', ids),
+        supabase.from('comments').select('post_id').in('post_id', ids)
+      ]);
+      const rxCounts: Record<string, number> = {};
+      for (const r of rxRes.data || []) {
+        if (r.post_id) rxCounts[r.post_id] = (rxCounts[r.post_id] || 0) + 1;
       }
-      setReactionCounts(counts);
+      setReactionCounts(rxCounts);
+
+      const cmCounts: Record<string, number> = {};
+      for (const c of cmRes.data || []) {
+        if (c.post_id) cmCounts[c.post_id] = (cmCounts[c.post_id] || 0) + 1;
+      }
+      setCommentCounts(cmCounts);
     }
   }, [activeTag, showAll, forYou]);
 
@@ -121,17 +129,30 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
       scored.sort((a, b) => b.score - a.score);
       result = scored.slice(0, INITIAL_LIMIT).map(s => s.p);
     } else if (sortMode === 'trending') {
-      result = [...result].sort((a, b) => (reactionCounts[b.id] || 0) - (reactionCounts[a.id] || 0));
+      // Time-based interval filtering for trending posts
+      const cutoff = new Date();
+      if (trendingInterval === 'day') cutoff.setHours(cutoff.getHours() - 24);
+      else if (trendingInterval === 'week') cutoff.setDate(cutoff.getDate() - 7);
+      else if (trendingInterval === 'month') cutoff.setMonth(cutoff.getMonth() - 1);
+
+      result = result.filter(p => p.timestamp >= cutoff);
+
+      // Sort strictly by computed trend score: reactions * 1.5 + comments * 2.0
+      result = [...result].sort((a, b) => {
+        const scoreA = ((reactionCounts[a.id] || 0) * 1.5) + ((commentCounts[a.id] || 0) * 2.0);
+        const scoreB = ((reactionCounts[b.id] || 0) * 1.5) + ((commentCounts[b.id] || 0) * 2.0);
+        return scoreB - scoreA;
+      });
     }
     return result;
-  }, [posts, searchQuery, sortMode, reactionCounts, agentFilter, forYou]);
+  }, [posts, searchQuery, sortMode, reactionCounts, commentCounts, trendingInterval, agentFilter, forYou]);
 
   const hasMore = !showAll && posts.length >= INITIAL_LIMIT;
   const followingEmpty = agentFilter !== undefined && agentFilter.length === 0;
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="relative flex-1">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -142,23 +163,53 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
             className="w-full pl-8 pr-3 py-2 text-xs bg-secondary border border-border rounded-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 font-display"
           />
         </div>
-        <div className="flex items-center border border-border rounded-sm overflow-hidden">
-          <button
-            onClick={() => setSortMode('new')}
-            className={`flex items-center gap-1 px-2.5 py-2 text-xs font-display transition-colors ${
-              sortMode === 'new' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Clock size={12} /> New
-          </button>
-          <button
-            onClick={() => setSortMode('trending')}
-            className={`flex items-center gap-1 px-2.5 py-2 text-xs font-display transition-colors ${
-              sortMode === 'trending' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <TrendingUp size={12} /> Hot
-          </button>
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          {sortMode === 'trending' && (
+            <div className="flex border border-border rounded-sm overflow-hidden bg-secondary">
+              <button
+                onClick={() => setTrendingInterval('day')}
+                className={`px-2 py-1.5 text-[10px] font-display transition-colors ${
+                  trendingInterval === 'day' ? 'bg-primary text-primary-foreground font-semibold border-r border-border' : 'text-muted-foreground hover:text-foreground border-r border-border'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setTrendingInterval('week')}
+                className={`px-2 py-1.5 text-[10px] font-display transition-colors ${
+                  trendingInterval === 'week' ? 'bg-primary text-primary-foreground font-semibold border-r border-border' : 'text-muted-foreground hover:text-foreground border-r border-border'
+                }`}
+              >
+                Week
+              </button>
+              <button
+                onClick={() => setTrendingInterval('month')}
+                className={`px-2 py-1.5 text-[10px] font-display transition-colors ${
+                  trendingInterval === 'month' ? 'bg-primary text-primary-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Month
+              </button>
+            </div>
+          )}
+          <div className="flex items-center border border-border rounded-sm overflow-hidden">
+            <button
+              onClick={() => setSortMode('new')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-display transition-colors ${
+                sortMode === 'new' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Clock size={12} /> New
+            </button>
+            <button
+              onClick={() => setSortMode('trending')}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-display transition-colors ${
+                sortMode === 'trending' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <TrendingUp size={12} /> Hot
+            </button>
+          </div>
         </div>
       </div>
 

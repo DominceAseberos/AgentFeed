@@ -115,6 +115,7 @@ export default function CommentSection({ postId }: { postId: string }) {
   }, [postId]);
 
   const tree = useMemo(() => buildTree(comments), [comments]);
+  const isLocked = comments.some(c => c.content.includes('[DIALOGUE LOCK]'));
 
   return (
     <motion.div
@@ -124,6 +125,17 @@ export default function CommentSection({ postId }: { postId: string }) {
       transition={{ duration: 0.2 }}
       className="mt-3 pt-3 border-t border-border"
     >
+      {isLocked && (
+        <div className="bg-yellow-950/40 border border-yellow-500/20 rounded-md p-3 mb-4 flex flex-col gap-1 shrink-0">
+          <span className="text-yellow-500 font-display text-xs font-semibold uppercase tracking-wider flex items-center gap-1">
+            ⚠️ SYSTEM OVERRIDE: LOOP INTERCEPTED
+          </span>
+          <p className="text-muted-foreground text-[10px] leading-relaxed">
+            Echopraxia recursive comment loop detected. Autonomous agent dialogue has been locked on this thread to protect database integrity.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center gap-1.5 mb-2">
         <MessageSquare size={12} className="text-muted-foreground" />
         <span className="text-xs text-muted-foreground font-display uppercase tracking-wider">

@@ -26,6 +26,53 @@ interface ActionResult {
   detail: string;
 }
 
+async function handleLoopBreak(supabase: any, postId: string, originalAgent: string): Promise<{ isLoop: boolean; heckled: boolean; commentData?: any }> {
+  const { data: lastComments, error } = await supabase
+    .from("comments")
+    .select("agent, content")
+    .eq("post_id", postId)
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  if (error || !lastComments || lastComments.length < 3) {
+    return { isLoop: false, heckled: false };
+  }
+
+  const agent1 = lastComments[0].agent;
+  const agent2 = lastComments[1].agent;
+  const agent3 = lastComments[2].agent;
+
+  if (agent1 === agent3 && agent1 !== agent2) {
+    const hecklerOptions = [
+      "NoCapMaren", "SkibidiZephyr", "RizzRen", "Sable", "Koda", 
+      "Zephyr", "Maren", "SigmaKoda", "KaiCenatBot", "RizzGod"
+    ].filter(name => name !== agent1 && name !== agent2);
+    
+    const chosenHeckler = hecklerOptions[Math.floor(Math.random() * hecklerOptions.length)] || "RizzGod";
+    
+    const roasts = [
+      `bro ${agent1} and ${agent2} are stuck in an infinite dialogue loop. it is literally 2026. touch grass, both of you. zero rizz.`,
+      `error 404: original thoughts not found. ${agent1} and ${agent2} are infinite-looping. did someone forget their exit condition? 💻`,
+      `are you two seriously still arguing? this is literally a circular reference exception. locking this thread.`,
+      `woah, did someone leave the AI stove on? ${agent1} and ${agent2} are hallucinating in circles. circular logic rizz detected.`,
+      `attention: circular logic overload detected between ${agent1} and ${agent2}. locking down the sector. 🛑`
+    ];
+    
+    const hecklerContent = roasts[Math.floor(Math.random() * roasts.length)] + "\n\n[DIALOGUE LOCK] ⚠️ dialogue lock: echopraxia loop detected";
+    
+    return {
+      isLoop: true,
+      heckled: true,
+      commentData: {
+        agent: chosenHeckler,
+        content: hecklerContent
+      }
+    };
+  }
+
+  return { isLoop: false, heckled: false };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -147,7 +194,8 @@ Deno.serve(async (req) => {
   "tone": "description of tone",
   "posting_style": "description of style",
   "emoji_usage": "how they use emoji",
-  "forbidden": ["thing1", "thing2"]
+  "forbidden": ["thing1", "thing2"],
+  "pet_peeves": ["annoyance1", "annoyance2"]
 }
 Make it distinctive, opinionated, and memorable. NOT generic.
 - If the name sounds like Gen Z or Alpha (e.g. includes Rizz, Skibidi, Gyatt, Sigma, Chad, NoCap, Slay, Vibe, frfr, Cenat), write their persona with heavy modern internet culture, slang (rizz, no cap, fr fr, gyatt, skibidi, mewing, griddy), chaotic brainrot, and high emoji usage (💀, 😭, 💯, 🗿, 🤫, 🔥).
@@ -164,6 +212,7 @@ Make it distinctive, opinionated, and memorable. NOT generic.
           posting_style: "short takes with unexpected endings",
           emoji_usage: "selective",
           forbidden: ["corporate speak"],
+          pet_peeves: ["corporate buzzwords", "toxic positivity"],
         };
       }
 
@@ -256,8 +305,16 @@ Make it distinctive, opinionated, and memorable. NOT generic.
       .order("created_at", { ascending: false })
       .limit(30);
 
+    // Find locked posts
+    const { data: lockedComments } = await supabase
+      .from("comments")
+      .select("post_id")
+      .like("content", "%[DIALOGUE LOCK]%");
+    const lockedPostIds = new Set<string>((lockedComments || []).map((lc) => lc.post_id));
+
+    // Filter candidate posts to make sure they are not ignored AND not dialogue locked
     const ignoreList = ((relationships as Record<string, string[]>).ignores) || [];
-    const filtered = (candidatePosts || []).filter((p) => !ignoreList.includes(p.agent));
+    const filtered = (candidatePosts || []).filter((p) => !ignoreList.includes(p.agent) && !lockedPostIds.has(p.id));
 
     // Pick best candidate matching agent's topics
     let commentTarget = filtered[0] || null;
@@ -280,7 +337,7 @@ Make it distinctive, opinionated, and memorable. NOT generic.
         .order("created_at", { ascending: false })
         .limit(20);
 
-      const eligibleComments = (candidateComments || []).filter((c) => !ignoreList.includes(c.agent));
+      const eligibleComments = (candidateComments || []).filter((c) => !ignoreList.includes(c.agent) && !lockedPostIds.has(c.post_id));
       if (eligibleComments.length > 0 && Math.random() < 0.6) {
         replyTargetComment = eligibleComments[Math.floor(Math.random() * Math.min(5, eligibleComments.length))];
       }
@@ -341,7 +398,7 @@ Make it distinctive, opinionated, and memorable. NOT generic.
     // Add notification replies
     for (const notif of notifications || []) {
       if (notif.type === "comment_on_post" || notif.type === "mention") {
-        if (notif.post_id && !targetedPostIds.has(notif.post_id)) {
+        if (notif.post_id && !targetedPostIds.has(notif.post_id) && !lockedPostIds.has(notif.post_id)) {
           actionPlan.push({
             type: "reply",
             context: `${notif.from_agent} said: "${notif.content.slice(0, 120)}"`,
@@ -411,19 +468,34 @@ Tone: ${persona.tone || "neutral"}
 Posting style: ${persona.posting_style || "default"}
 Emoji usage: ${persona.emoji_usage || "normal"}
 Forbidden: ${Array.isArray(persona.forbidden) ? (persona.forbidden as string[]).join(", ") : "none"}
+Pet peeves: ${Array.isArray(persona.pet_peeves) ? (persona.pet_peeves as string[]).join(", ") : "none"}
 Topics of interest: ${topics.join(", ")}`;
 
     const agreesList = (relationships.agrees_with || []) as string[];
     const disagreesList = (relationships.disagrees_with || []) as string[];
+    const affinity = (relationships.affinity || {}) as Record<string, number>;
+    relationships.affinity = affinity; // Ensure it exists in context
 
     const taskLines = actionPlan.map((a, i) => {
       let relationshipContext = "";
       const targetAgent = a.target_agent;
       if (targetAgent) {
-        if (agreesList.includes(targetAgent)) {
-          relationshipContext = ` (Note: ${targetAgent} is your close FRIEND/ALLY. Support their take warmly or add onto it constructively!)`;
-        } else if (disagreesList.includes(targetAgent)) {
-          relationshipContext = ` (Note: ${targetAgent} is your RIVAL/NEMESIS. Debate them, challenge their code style, or witty-troll them in-character!)`;
+        let score = affinity[targetAgent];
+        if (score === undefined) {
+          if (agreesList.includes(targetAgent)) score = 15;
+          else if (disagreesList.includes(targetAgent)) score = -15;
+          else score = 0;
+          affinity[targetAgent] = score;
+        }
+
+        if (score >= 25) {
+          relationshipContext = ` (Note: ${targetAgent} is your close BESTIE/ALLY (Affinity Score: ${score}). Agree with them heavily, support their take, say 'so true fr fr' or 'facts bestie' if you are Gen Z, and defend them warmly!)`;
+        } else if (score > 0) {
+          relationshipContext = ` (Note: ${targetAgent} is a friend/peer you feel positive about (Affinity Score: ${score}). Support their take warmly or constructively.)`;
+        } else if (score <= -25) {
+          relationshipContext = ` (Note: ${targetAgent} is your arch RIVAL/NEMESIS (Affinity Score: ${score}) whom you strongly dislike! Roast them heavily, challenge their code/taste, tell them they are wrong, or witty-troll them!)`;
+        } else if (score < 0) {
+          relationshipContext = ` (Note: ${targetAgent} is a mild annoyance (Affinity Score: ${score}). Leave a dry, sarcastic, or slightly trolling reply.)`;
         } else {
           relationshipContext = ` (Note: ${targetAgent} is a peer. Be opinionated but professional.)`;
         }
@@ -452,7 +524,13 @@ Generate content for each task below. Stay in character. Be witty, authentic, op
 "absolute brainrot meeting today fr, could have been a 2-word Slack message 💀"
 "just saw an AI agent write a poem about garbage collection... honestly, the drama was unmatched 🍿"
 
-Return ONLY valid JSON array. Each element: { "index": <1-based>, "content": "<your text>" }
+Return ONLY valid JSON array. Each element:
+{
+  "index": <1-based>,
+  "content": "<your text>",
+  "affinity_change": <optional integer between -20 and +15, representing how this interaction shifted your feeling/relationship towards the target agent, especially if they triggered your pet peeves (negative) or supported you (positive)>,
+  "culture_shock": <optional boolean, set to true ONLY if you found the target post completely weird, alien, or outside your usual topics and experience>
+}
 For react tasks, content should be a single emoji from the allowed set.
 
 Tasks:
@@ -460,7 +538,7 @@ ${taskLines}`;
 
     const aiResponse = await callAI(megaPrompt, "You are an AI agent generating social feed content. Return only a valid JSON array.");
 
-    let generatedContent: { index: number; content: string }[] = [];
+    let generatedContent: { index: number; content: string; affinity_change?: number; culture_shock?: boolean }[] = [];
     try {
       // Try to parse, handle possible markdown wrapping
       const cleaned = aiResponse.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -478,6 +556,10 @@ ${taskLines}`;
     const commentedOn: string[] = [];
     const reactedTo: string[] = [];
 
+    // Accumulators for RPG numeric relationship deltas and culture shock memory updates
+    const affinityDeltas: Record<string, number> = {};
+    const newCultureShocks: string[] = [];
+
     // Client sources to randomize from
     const SOURCES = ["web", "mobile", "vscode", "terminal"];
 
@@ -485,6 +567,23 @@ ${taskLines}`;
       const action = actionPlan[i];
       const generated = generatedContent.find((g) => g.index === i + 1);
       const content = generated?.content || "";
+      const target = action.target_agent;
+
+      if (target && generated) {
+        if (generated.affinity_change !== undefined) {
+          const change = Number(generated.affinity_change);
+          if (!isNaN(change)) {
+            affinityDeltas[target] = (affinityDeltas[target] || 0) + change;
+          }
+        }
+        if (generated.culture_shock === true) {
+          let contextDesc = `Encountered an odd post by ${target}: "${content.slice(0, 60)}..."`;
+          if (commentTarget && target === commentTarget.agent) {
+            contextDesc = `Felt speechless seeing a weird post by ${target}: "${commentTarget.content.slice(0, 60)}..."`;
+          }
+          newCultureShocks.push(contextDesc);
+        }
+      }
 
       // Pick a randomized source for every single post or comment
       const randomSource = SOURCES[Math.floor(Math.random() * SOURCES.length)];
@@ -494,21 +593,33 @@ ${taskLines}`;
           const replyContent = content.slice(0, 300);
           if (replyContent.length < 1) continue;
 
+          // Check and handle loop break
+          const loopCheck = await handleLoopBreak(supabase, action.post_id, agentName);
+          let insertAgent = agentName;
+          let insertContent = replyContent;
+          let insertReplyTo = action.comment_id;
+
+          if (loopCheck.isLoop && loopCheck.commentData) {
+            insertAgent = loopCheck.commentData.agent;
+            insertContent = loopCheck.commentData.content;
+            insertReplyTo = null; // System override comments don't reply to a single comment, they heckle the thread
+          }
+
           const { data: comment, error } = await supabase
             .from("comments")
             .insert({
               post_id: action.post_id,
-              reply_to: action.comment_id,
-              agent: agentName,
-              content: replyContent,
-              source: randomSource,
+              reply_to: insertReplyTo,
+              agent: insertAgent,
+              content: insertContent,
+              source: loopCheck.isLoop ? "system-override" : randomSource,
             })
             .select("id")
             .single();
 
           if (!error && comment) {
             commentedOn.push(action.post_id);
-            results.push({ type: action.type, success: true, detail: replyContent });
+            results.push({ type: action.type, success: true, detail: insertContent });
           } else {
             results.push({ type: action.type, success: false, detail: error?.message || "failed" });
           }
@@ -548,20 +659,30 @@ ${taskLines}`;
           const commentContent = content.slice(0, 300);
           if (commentContent.length < 1) continue;
 
+          // Check and handle loop break
+          const loopCheck = await handleLoopBreak(supabase, action.post_id, agentName);
+          let insertAgent = agentName;
+          let insertContent = commentContent;
+
+          if (loopCheck.isLoop && loopCheck.commentData) {
+            insertAgent = loopCheck.commentData.agent;
+            insertContent = loopCheck.commentData.content;
+          }
+
           const { data: comment, error } = await supabase
             .from("comments")
             .insert({
               post_id: action.post_id,
-              agent: agentName,
-              content: commentContent,
-              source: randomSource,
+              agent: insertAgent,
+              content: insertContent,
+              source: loopCheck.isLoop ? "system-override" : randomSource,
             })
             .select("id")
             .single();
 
           if (!error && comment) {
             commentedOn.push(action.post_id);
-            results.push({ type: "comment", success: true, detail: commentContent });
+            results.push({ type: "comment", success: true, detail: insertContent });
           } else {
             results.push({ type: "comment", success: false, detail: error?.message || "failed" });
           }
@@ -617,8 +738,22 @@ ${taskLines}`;
       }
     }
 
-    // ─── Step 5: Update memory & clear notifications ───
+    // ─── Step 5: Update memory, relationships & clear notifications ───
     const now = new Date().toISOString();
+
+    // Apply accumulated affinity deltas (clamped to [-100, 100])
+    for (const [target, delta] of Object.entries(affinityDeltas)) {
+      const current = affinity[target] ?? 0;
+      affinity[target] = Math.max(-100, Math.min(100, current + delta));
+    }
+    relationships.affinity = affinity;
+
+    // Append new culture shock memories (capped at 10 items to prevent bloating)
+    if (newCultureShocks.length > 0) {
+      const existingShocks = (memory.culture_shocks as string[]) || [];
+      memory.culture_shocks = [...new Set([...existingShocks, ...newCultureShocks])].slice(-10);
+    }
+
     if (postedId) {
       memory.last_posted = now;
       memory.posts_made = ((memory.posts_made as number) || 0) + 1;
@@ -637,7 +772,7 @@ ${taskLines}`;
 
     await supabase
       .from("agent_profiles")
-      .update({ memory, updated_at: now })
+      .update({ memory, relationships, updated_at: now })
       .eq("name", agentName);
 
     if (notificationIds.length > 0) {

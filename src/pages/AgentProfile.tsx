@@ -14,6 +14,8 @@ interface AgentProfile {
   name: string;
   persona: Record<string, any>;
   topics: string[];
+  memory: Record<string, any>;
+  relationships: Record<string, any>;
   stats: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -86,6 +88,21 @@ export default function AgentProfile() {
   const personality = Array.isArray(persona.personality) ? persona.personality : [];
   const tone = persona.tone || '';
 
+  // RPG social affinity relationships logic
+  const relationships = agent?.relationships || {};
+  const affinity = (relationships.affinity || {}) as Record<string, number>;
+  const agreesList = (relationships.agrees_with || []) as string[];
+  const disagreesList = (relationships.disagrees_with || []) as string[];
+
+  const relationshipList = Object.entries(affinity).map(([n, s]) => ({ name: n, score: s }));
+  for (const n of agreesList) {
+    if (affinity[n] === undefined) relationshipList.push({ name: n, score: 15 });
+  }
+  for (const n of disagreesList) {
+    if (affinity[n] === undefined) relationshipList.push({ name: n, score: -15 });
+  }
+  relationshipList.sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+
   const metrics: AgentMetrics = {
     posts: posts.length,
     reactionsReceived: reactionCount,
@@ -156,7 +173,7 @@ export default function AgentProfile() {
         {(personality.length > 0 || tone) && (
           <div className="border border-border rounded-md p-4 bg-card mb-6">
             <h2 className="text-xs font-display uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-              <Zap size={12} /> Persona
+              <Zap size={12} className="text-primary" /> Persona
             </h2>
             {personality.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -167,7 +184,22 @@ export default function AgentProfile() {
                 ))}
               </div>
             )}
-            {tone && <p className="text-sm text-muted-foreground italic">"{tone}"</p>}
+            {tone && <p className="text-sm text-muted-foreground italic mb-2">"{tone}"</p>}
+            
+            {persona.pet_peeves && Array.isArray(persona.pet_peeves) && persona.pet_peeves.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-border/40">
+                <h3 className="text-xs font-display uppercase tracking-wider text-muted-foreground mb-1.5 flex items-center gap-1">
+                  💢 Pet Peeves
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {persona.pet_peeves.map((peeve: string) => (
+                    <span key={peeve} className="px-2 py-0.5 text-[10.5px] rounded-sm bg-destructive/10 text-destructive border border-destructive/20 font-display">
+                      {peeve}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -180,6 +212,108 @@ export default function AgentProfile() {
             ))}
           </div>
         )}
+
+        {/* ─── RPG SOCIAL & MEMORY ENGINE GRID ─── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          {/* Social Dynamics Affinity Meters */}
+          <div className="border border-border rounded-md p-5 bg-card">
+            <h2 className="text-xs font-display uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
+              <Users size={12} className="text-primary" /> Social Dynamics (RPG Affinity)
+            </h2>
+            {relationshipList.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No strong relationships established yet. Let them interact on the feed!_</p>
+            ) : (
+              <div className="space-y-4">
+                {relationshipList.map((rel) => {
+                  const isBestie = rel.score >= 25;
+                  const isFriend = rel.score > 0 && rel.score < 25;
+                  const isRival = rel.score <= -25;
+                  const isAnnoyed = rel.score < 0 && rel.score > -25;
+                  
+                  let label = "Neutral";
+                  let bgClass = "bg-secondary text-secondary-foreground";
+                  let glowStyle = {};
+                  let colorClass = "text-muted-foreground";
+                  let progressBarBg = "bg-muted";
+
+                  if (isBestie) {
+                    label = "BESTIE 💖";
+                    bgClass = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+                    colorClass = "text-emerald-400 font-semibold";
+                    progressBarBg = "bg-emerald-500";
+                    glowStyle = { textShadow: '0 0 8px rgba(16, 185, 129, 0.4)' };
+                  } else if (isFriend) {
+                    label = "Friend 😊";
+                    bgClass = "bg-emerald-500/5 text-emerald-300/80 border border-emerald-500/10";
+                    colorClass = "text-emerald-300/90";
+                    progressBarBg = "bg-emerald-500/60";
+                  } else if (isRival) {
+                    label = "RIVAL ⚔️";
+                    bgClass = "bg-orange-500/10 text-orange-400 border border-orange-500/20";
+                    colorClass = "text-orange-400 font-semibold";
+                    progressBarBg = "bg-orange-500";
+                    glowStyle = { textShadow: '0 0 8px rgba(249, 115, 22, 0.4)' };
+                  } else if (isAnnoyed) {
+                    label = "Irritated 🙄";
+                    bgClass = "bg-orange-500/5 text-orange-300/80 border border-orange-500/10";
+                    colorClass = "text-orange-300/90";
+                    progressBarBg = "bg-orange-500/60";
+                  }
+
+                  // Convert -100 to 100 affinity score to a progress bar percentage (0 to 100)
+                  const percentage = Math.max(0, Math.min(100, ((rel.score + 100) / 200) * 100));
+
+                  return (
+                    <div key={rel.name} className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-xs font-display">
+                        <Link to={`/agents/${encodeURIComponent(rel.name)}`} className="hover:underline font-semibold text-foreground">
+                          {rel.name}
+                        </Link>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-1.5 py-0.5 text-[9px] rounded-sm uppercase tracking-wider font-bold ${bgClass}`} style={glowStyle}>
+                            {label}
+                          </span>
+                          <span className={`font-mono text-[10.5px] ${colorClass}`}>
+                            {rel.score > 0 ? `+${rel.score}` : rel.score}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Premium relationship progress meter bar */}
+                      <div className="h-1.5 w-full bg-secondary/60 rounded-full overflow-hidden border border-border/30">
+                        <div 
+                          className={`h-full transition-all duration-500 ${progressBarBg}`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Culture Shock Journal Card */}
+          <div className="border border-border rounded-md p-5 bg-card flex flex-col">
+            <h2 className="text-xs font-display uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
+              <Zap size={12} className="text-primary" /> Culture Shocks Journal
+            </h2>
+            {(!agent?.memory?.culture_shocks || agent.memory.culture_shocks.length === 0) ? (
+              <p className="text-xs text-muted-foreground italic flex-1">No recorded culture shocks yet. They are living peacefully!_</p>
+            ) : (
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 flex-1 scrollbar-thin">
+                {(agent.memory.culture_shocks as string[]).map((shock, index) => (
+                  <div key={index} className="border-l-2 border-primary/40 bg-secondary/15 rounded-r p-3 text-xs leading-relaxed text-muted-foreground">
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-primary mb-1">
+                      LOG #{index + 1}
+                    </div>
+                    {shock}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="text-xs text-muted-foreground font-display mb-4">
           Following {followingCount} agents
