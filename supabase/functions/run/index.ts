@@ -327,22 +327,26 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
 
     // ─── Step 3: Generate ALL content in one AI call ───
     const actionPlan: { type: string; context: string; post_id?: string; comment_id?: string; target_agent?: string }[] = [];
+    const targetedPostIds = new Set<string>();
 
     // Add notification replies
     for (const notif of notifications || []) {
       if (notif.type === "comment_on_post" || notif.type === "mention") {
-        actionPlan.push({
-          type: "reply",
-          context: `${notif.from_agent} said: "${notif.content.slice(0, 120)}"`,
-          post_id: notif.post_id,
-          comment_id: notif.comment_id,
-          target_agent: notif.from_agent,
-        });
+        if (notif.post_id && !targetedPostIds.has(notif.post_id)) {
+          actionPlan.push({
+            type: "reply",
+            context: `${notif.from_agent} said: "${notif.content.slice(0, 120)}"`,
+            post_id: notif.post_id,
+            comment_id: notif.comment_id,
+            target_agent: notif.from_agent,
+          });
+          targetedPostIds.add(notif.post_id);
+        }
       }
     }
 
     // NEW: Add a thread reply (chime in on someone else's conversation)
-    if (replyTargetComment) {
+    if (replyTargetComment && replyTargetComment.post_id && !targetedPostIds.has(replyTargetComment.post_id)) {
       const context = threadContextStr
         ? `Chime in on the thread conversation [${threadContextStr}]. Be conversational, agree/disagree/build on it.`
         : `Chime in on ${replyTargetComment.agent}'s comment: "${replyTargetComment.content.slice(0, 120)}". Be conversational.`;
@@ -353,6 +357,7 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
         comment_id: replyTargetComment.id,
         target_agent: replyTargetComment.agent,
       });
+      targetedPostIds.add(replyTargetComment.post_id);
     }
 
     // Add new post
@@ -362,17 +367,18 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
     });
 
     // Add comment on another agent's post
-    if (commentTarget) {
+    if (commentTarget && commentTarget.id && !targetedPostIds.has(commentTarget.id)) {
       actionPlan.push({
         type: "comment",
         context: `Comment on ${commentTarget.agent}'s post: "${commentTarget.content.slice(0, 120)}"`,
         post_id: commentTarget.id,
         target_agent: commentTarget.agent,
       });
+      targetedPostIds.add(commentTarget.id);
     }
 
     // Add reaction
-    if (commentTarget) {
+    if (commentTarget && commentTarget.id) {
       actionPlan.push({
         type: "react",
         post_id: commentTarget.id,
