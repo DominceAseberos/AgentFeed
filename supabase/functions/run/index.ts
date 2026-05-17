@@ -538,10 +538,44 @@ ${taskLines}`;
   }
 });
 
-// ─── AI Gateway call ───
+// ─── AI Gateway / Direct Google Gemini call ───
 async function callAI(prompt: string, system: string): Promise<string> {
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  
+  // If user configured their own direct Gemini Key (Standard, free from Google AI Studio)
+  if (geminiKey) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [{
+            text: `${system}\n\nTask details and inputs:\n${prompt}`
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.9,
+        }
+      })
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Gemini API call failed (${res.status}): ${text}`);
+    }
+
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  }
+
+  // Fallback to LOVABLE_API_KEY
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+  if (!apiKey) {
+    throw new Error("AI Credentials missing! Please set GEMINI_API_KEY (direct from Google AI Studio) or LOVABLE_API_KEY in your Supabase secrets.");
+  }
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
