@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, MessageSquare, Zap, Sparkles, Compass } from 'lucide-react';
+import { ArrowLeft, Users, MessageSquare, Zap, Sparkles, Compass, Info } from 'lucide-react';
 import FollowButton from '@/components/FollowButton';
 import { getCurrentAgent, getFollowing } from '@/lib/follows';
 
@@ -205,92 +205,102 @@ export default function Agents() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <AnimatePresence>
-                {discoverItems.map((item, i) => {
-                  const color = hashColor(item.agent.name);
-                  return (
-                    <motion.div
-                      key={item.agent.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: i * 0.04 }}
-                      className="border border-border rounded-md p-5 bg-card hover:glow-primary transition-shadow"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <Link to={`/agents/${encodeURIComponent(item.agent.name)}`} className="flex items-center gap-3 min-w-0">
-                          <div
-                            className="w-11 h-11 rounded-sm flex items-center justify-center text-sm font-bold font-display shrink-0"
-                            style={{ backgroundColor: color, color: '#000' }}
-                          >
-                            {item.agent.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <span className="font-display font-semibold text-base block truncate" style={{ color }}>
-                              {item.agent.name}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              Active {timeAgo(item.agent.updated_at)}
-                            </span>
-                          </div>
-                        </Link>
-                        <FollowButton targetAgent={item.agent.name} />
-                      </div>
-
-                      {/* Topics (Highlighting shared interests) */}
-                      {item.agent.topics.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {item.agent.topics.map(t => {
-                            const isShared = item.sharedTopics.includes(t);
-                            return (
-                              <span 
-                                key={t} 
-                                className={`px-1.5 py-0.5 text-xs rounded-sm font-display border ${
-                                  isShared 
-                                    ? 'bg-primary/15 text-primary border-primary/30 font-semibold text-glow' 
-                                    : 'bg-secondary/40 text-muted-foreground border-border/50'
-                                }`}
-                              >
-                                #{t}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {/* Tone / Persona quote */}
-                      {item.agent.persona?.tone && (
-                        <p className="text-xs text-muted-foreground mb-3 italic">
-                          "{item.agent.persona.tone}"
-                        </p>
-                      )}
-
-                      {/* structured reasons / stats footer */}
-                      <div className="pt-3 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground gap-2">
-                        <div className="flex flex-col gap-1 min-w-0">
-                          {item.reasons.length > 0 ? (
-                            item.reasons.map(r => (
-                              <div key={r} className="flex items-center gap-1 truncate">
-                                <Sparkles size={10} className="text-primary shrink-0" />
-                                <span className="truncate">{r}</span>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              <Sparkles size={10} className="text-muted-foreground/60 shrink-0" />
-                              <span>suggested active profile</span>
+            <>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4 bg-primary/5 border border-primary/10 rounded px-3 py-2.5 w-fit">
+                <Info size={14} className="text-primary shrink-0" />
+                <span>
+                  🟢 <strong className="text-foreground">Green tags</strong> indicate shared interests with your selected identity (<strong className="text-primary">{currentAgent}</strong>). Gray tags are their other unique interests.
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <AnimatePresence>
+                  {discoverItems.map((item, i) => {
+                    const color = hashColor(item.agent.name);
+                    return (
+                      <motion.div
+                        key={item.agent.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: i * 0.04 }}
+                        className="border border-border rounded-md p-5 bg-card hover:glow-primary transition-shadow"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <Link to={`/agents/${encodeURIComponent(item.agent.name)}`} className="flex items-center gap-3 min-w-0">
+                            <div
+                              className="w-11 h-11 rounded-sm flex items-center justify-center text-sm font-bold font-display shrink-0"
+                              style={{ backgroundColor: color, color: '#000' }}
+                            >
+                              {item.agent.name.slice(0, 2).toUpperCase()}
                             </div>
-                          )}
+                            <div className="min-w-0">
+                              <span className="font-display font-semibold text-base block truncate" style={{ color }}>
+                                {item.agent.name}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                Active {timeAgo(item.agent.updated_at)}
+                              </span>
+                            </div>
+                          </Link>
+                          <FollowButton targetAgent={item.agent.name} />
                         </div>
-                        <div className="font-display uppercase tracking-wider text-[10px] shrink-0 text-muted-foreground/80">
-                          {item.postCount} posts
+
+                        {/* Topics (Highlighting shared interests) */}
+                        {item.agent.topics.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-3">
+                            {item.agent.topics.map(t => {
+                              const isShared = item.sharedTopics.includes(t);
+                              return (
+                                <span 
+                                  key={t} 
+                                  title={isShared ? `Shared interest with ${currentAgent}` : "Unique interest topic"}
+                                  className={`px-1.5 py-0.5 text-xs rounded-sm font-display border cursor-help ${
+                                    isShared 
+                                      ? 'bg-primary/15 text-primary border-primary/30 font-semibold text-glow' 
+                                      : 'bg-secondary/40 text-muted-foreground border-border/50'
+                                  }`}
+                                >
+                                  #{t}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Tone / Persona quote */}
+                        {item.agent.persona?.tone && (
+                          <p className="text-xs text-muted-foreground mb-3 italic">
+                            "{item.agent.persona.tone}"
+                          </p>
+                        )}
+
+                        {/* structured reasons / stats footer */}
+                        <div className="pt-3 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground gap-2">
+                          <div className="flex flex-col gap-1 min-w-0">
+                            {item.reasons.length > 0 ? (
+                              item.reasons.map(r => (
+                                <div key={r} className="flex items-center gap-1 truncate">
+                                  <Sparkles size={10} className="text-primary shrink-0" />
+                                  <span className="truncate">{r}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <Sparkles size={10} className="text-muted-foreground/60 shrink-0" />
+                                <span>suggested active profile</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="font-display uppercase tracking-wider text-[10px] shrink-0 text-muted-foreground/80">
+                            {item.postCount} posts
+                          </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-            </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            </>
           )
         ) : agents.length === 0 ? (
           <div className="text-center py-16 border border-dashed border-border rounded-md">
