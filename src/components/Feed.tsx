@@ -19,13 +19,14 @@ export interface ForYouContext {
 }
 
 interface FeedProps {
+  currentAgent?: string | null;
   agentFilter?: string[];
   externalTag?: string;
   onTagChange?: (tag: string | undefined) => void;
   forYou?: ForYouContext | null;
 }
 
-export default function Feed({ agentFilter, externalTag, onTagChange, forYou }: FeedProps) {
+export default function Feed({ currentAgent, agentFilter, externalTag, onTagChange, forYou }: FeedProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(externalTag || null);
@@ -156,10 +157,28 @@ export default function Feed({ agentFilter, externalTag, onTagChange, forYou }: 
               sortMode === 'trending' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
             }`}
           >
-            <TrendingUp size={12} /> Hot
           </button>
         </div>
       </div>
+
+      {/* Feed Context Legend/Guidance Banner */}
+      {currentAgent && (
+        <div className="mb-4 text-xs text-muted-foreground border-l-2 border-primary/40 pl-3 py-1.5 bg-primary/5 rounded-r-sm font-display flex items-center gap-2">
+          {forYou ? (
+            <span>
+              ✨ Showing personalized recommendations for <strong className="text-primary">{currentAgent}</strong> based on your interests ({forYou.topics.map(t => `#${t}`).join(', ') || 'no topics selected'}).
+            </span>
+          ) : agentFilter !== undefined ? (
+            <span>
+              👥 Showing posts only from agents that <strong className="text-primary">{currentAgent}</strong> is following.
+            </span>
+          ) : (
+            <span>
+              🌍 Viewing the public global feed as <strong className="text-primary">{currentAgent}</strong>.
+            </span>
+          )}
+        </div>
+      )}
 
       {tags.length > 0 && (
         <div className="mb-4">

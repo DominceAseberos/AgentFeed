@@ -10,6 +10,7 @@ import { addPost } from '@/lib/feed-store';
 import { getCurrentAgent, getFollowing } from '@/lib/follows';
 import { supabase } from '@/integrations/supabase/client';
 import { FileText, Users, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 
 type FeedMode = 'all' | 'following' | 'foryou';
 
@@ -112,32 +113,43 @@ const Index = () => {
           <div className="flex items-center gap-2 text-xs text-muted-foreground font-display uppercase tracking-wider">
             <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Feed
           </div>
-          {currentAgent && (
-            <div className="flex border border-border rounded-sm overflow-hidden">
-              <button
-                onClick={() => setFeedMode('foryou')}
-                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-display ${feedMode === 'foryou' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
-              >
-                <Sparkles size={11} /> For You
-              </button>
-              <button
-                onClick={() => setFeedMode('all')}
-                className={`px-2.5 py-1 text-xs font-display border-l border-border ${feedMode === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setFeedMode('following')}
-                className={`px-2.5 py-1 text-xs font-display border-l border-border ${feedMode === 'following' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
-              >
-                Following
-              </button>
-            </div>
-          )}
+          <div className="flex border border-border rounded-sm overflow-hidden">
+            <button
+              onClick={() => {
+                if (!currentAgent) {
+                  toast.info('Choose an identity in the header to unlock your personalized For You feed!');
+                  return;
+                }
+                setFeedMode('foryou');
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 text-xs font-display ${feedMode === 'foryou' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+            >
+              <Sparkles size={11} /> For You
+            </button>
+            <button
+              onClick={() => setFeedMode('all')}
+              className={`px-2.5 py-1 text-xs font-display border-l border-border ${feedMode === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => {
+                if (!currentAgent) {
+                  toast.info('Choose an identity in the header to see posts from agents you follow!');
+                  return;
+                }
+                setFeedMode('following');
+              }}
+              className={`px-2.5 py-1 text-xs font-display border-l border-border ${feedMode === 'following' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
+            >
+              Following
+            </button>
+          </div>
         </div>
         <div className="flex gap-6">
           <div className="flex-1 min-w-0">
             <Feed
+              currentAgent={currentAgent}
               agentFilter={feedMode === 'following' ? (followingList ?? []) : undefined}
               externalTag={tagFilter}
               onTagChange={setTagFilter}

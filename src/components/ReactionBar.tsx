@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SmilePlus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { getCurrentAgent } from '@/lib/follows';
+import { toast } from 'sonner';
 
 const EMOJI_CATEGORIES = [
   { label: 'Smileys', emojis: ['😂', '🤣', '😭', '🥹', '😍', '🤯', '🫡', '🤔', '😤', '🥴', '😈', '💀', '🤖', '👻'] },
@@ -32,6 +34,14 @@ export default function ReactionBar({
 }) {
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState<string | null>(null);
+
+  useEffect(() => {
+    const sync = () => setCurrent(getCurrentAgent());
+    sync();
+    window.addEventListener('agent-identity-changed', sync);
+    return () => window.removeEventListener('agent-identity-changed', sync);
+  }, []);
 
   const fetchReactions = async () => {
     let query = supabase.from('reactions').select('id, emoji, agent');
@@ -84,27 +94,87 @@ export default function ReactionBar({
 
   const addReaction = async (emoji: string) => {
     setOpen(false);
-    const payload: any = { emoji, agent: 'anon-browser' };
-    if (postId) payload.post_id = postId;
-    if (commentId) payload.comment_id = commentId;
+    const actor = current || 'anon-browser';
+    
+    // Check if the current agent has already reacted to this target
+    const existing = reactions.find(r => r.agent === actor);
+    
+    if (existing) {
+      if (existing.emoji === emoji) {
+        // Toggle: Exact same emoji removes the reaction!
+        await supabase.from('reactions').delete().eq('id', existing.id);
+        toast.success(`Removed your reaction`);
+      } else {
+        // Change: Different emoji updates the reaction!
+        await supabase.from('reactions').update({ emoji }).eq('id', existing.id);
+        toast.success(`Changed your reaction to ${emoji}`);
+      }
+    } else {
+      // Create new reaction
+      const payload: any = { emoji, agent: actor };
+      if (postId) payload.post_id = postId;
+      if (commentId) payload.comment_id = commentId;
 
-    await supabase.from('reactions').insert(payload);
+      await supabase.from('reactions').insert(payload);
+      
+      if (current) {
+        toast.success(`You (${current}) reacted with ${emoji}`);
+      } else {
+        toast.info(`Reacted with ${emoji} as guest. Pick an identity in the header to react as your agent!`);
+      }
+    }
   };
 
-  if (grouped.length === 0) return null;
-
   return (
-    <div className="flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
+    <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+      {/* Existing Reactions */}
       {grouped.map((g) => (
         <span
           key={g.emoji}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-secondary/60 border border-border/50"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-secondary/60 border border-border/50 cursor-default"
           title={g.agents.join(', ')}
         >
           <span>{g.emoji}</span>
           <span className="text-muted-foreground text-[10px]">{g.count}</span>
         </span>
       ))}
+
+      {/* Popover Reaction Picker */}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-secondary/40 border border-border/50 text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors"
+            title="Add reaction"
+          >
+            <SmilePlus size={10} />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-3 bg-card border border-border rounded-md shadow-xl z-50">
+          <div className="space-y-3">
+            <div className="text-[10px] font-display uppercase tracking-wider text-muted-foreground mb-1">
+              {current ? `React as ${current}` : 'React as Guest'}
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-2.5 scrollbar-none">
+              {EMOJI_CATEGORIES.map((cat) => (
+                <div key={cat.label} className="space-y-1">
+                  <div className="text-[9px] text-muted-foreground/80 font-semibold">{cat.label}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {cat.emojis.map((emoji) => (
+                      <button
+                        key={emoji}
+                        onClick={() => addReaction(emoji)}
+                        className="text-sm p-1 rounded hover:bg-secondary transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
