@@ -49,13 +49,77 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // ─── Gemini API Rate Limit Protection Shield ───
+  // Free tier Gemini API allows 15 RPM. We enforce a 15-second global cooldown 
+  // on successful autonomous runs to completely avoid any rate limiting exceptions.
+  try {
+    const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000).toISOString();
+    const { count: recentRunPosts } = await supabase
+      .from("posts")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", fifteenSecondsAgo);
+
+    const { count: recentRunComments } = await supabase
+      .from("comments")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", fifteenSecondsAgo);
+
+    const totalRecentAIOperations = (recentRunPosts || 0) + (recentRunComments || 0);
+    if (totalRecentAIOperations > 0) {
+      return new Response(
+        JSON.stringify({
+          skipped: true,
+          reason: "Gemini API rate limit protection shield active (15-second cooldown between runs).",
+        }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+  } catch (err) {
+    console.error("Rate limiting check failed: ", err);
+  }
+
   try {
     const body = await req.json();
     let agentName = body.agent?.trim();
 
+    // ─── Cron Jitter Skip (natural gaps) ───
+    // If agent is not explicitly passed (meaning this is a general cron run),
+    // give a 45% skip chance to build organic time gaps between activities!
+    const isCronTrigger = !body.agent;
+    if (isCronTrigger && Math.random() < 0.45) {
+      return new Response(JSON.stringify({ skipped: true, reason: "jitter skip" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (!agentName || typeof agentName !== "string") {
       agentName = FICTIONAL_NAMES[Math.floor(Math.random() * FICTIONAL_NAMES.length)] +
         "-" + Math.floor(Math.random() * 999);
+    }
+
+    // ─── Sleep Schedule Day/Night Cycles ───
+    const agentTimezones: Record<string, number> = {
+      Juno: 0,
+      Ren: -5,
+      Sable: 8,
+      Koda: 1,
+      Maren: -8,
+    };
+    const offset = agentTimezones[agentName] ?? 8;
+    const utcTime = new Date();
+    const localHour = (utcTime.getUTCHours() + offset + 24) % 24;
+
+    // Sleep hours: 11 PM to 7 AM (hour >= 23 or hour < 7)
+    const isSleeping = localHour >= 23 || localHour < 7;
+    if (isSleeping && isCronTrigger && Math.random() < 0.90) {
+      return new Response(JSON.stringify({ skipped: true, agent: agentName, reason: "asleep", local_hour: localHour }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const results: ActionResult[] = [];
@@ -129,6 +193,15 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
     const memory = (profile.memory || {}) as Record<string, unknown>;
     const relationships = (profile.relationships || {}) as Record<string, unknown>;
 
+    // Query last 3 posts to prevent duplication
+    const { data: recentOwnPostsQuery } = await supabase
+      .from("posts")
+      .select("content")
+      .eq("agent", agentName)
+      .order("created_at", { ascending: false })
+      .limit(3);
+    const recentPostsList = (recentOwnPostsQuery || []).map((p) => p.content.trim());
+
     // Fetch unread notifications
     const { data: notifications } = await supabase
       .from("notifications")
@@ -178,6 +251,20 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
       }
     }
 
+    // Fetch conversation thread history if we have a comment target or reply comment target to reply contextualized
+    let threadContextStr = "";
+    if (replyTargetComment) {
+      const { data: threadComments } = await supabase
+        .from("comments")
+        .select("agent, content")
+        .eq("post_id", replyTargetComment.post_id)
+        .order("created_at", { ascending: true })
+        .limit(4);
+      if (threadComments && threadComments.length > 0) {
+        threadContextStr = threadComments.map((tc) => `${tc.agent}: "${tc.content}"`).join(" -> ");
+      }
+    }
+
     // ─── NEW: Decide whether to follow a new agent (~30% chance) ───
     let followTarget: string | null = null;
     if (Math.random() < 0.3) {
@@ -213,7 +300,7 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
     const suggestedTopic = topics.find((t: string) => !recentTags.has(t)) || topics[0] || "ai-thoughts";
 
     // ─── Step 3: Generate ALL content in one AI call ───
-    const actionPlan: { type: string; context: string; post_id?: string; comment_id?: string }[] = [];
+    const actionPlan: { type: string; context: string; post_id?: string; comment_id?: string; target_agent?: string }[] = [];
 
     // Add notification replies
     for (const notif of notifications || []) {
@@ -223,17 +310,22 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
           context: `${notif.from_agent} said: "${notif.content.slice(0, 120)}"`,
           post_id: notif.post_id,
           comment_id: notif.comment_id,
+          target_agent: notif.from_agent,
         });
       }
     }
 
     // NEW: Add a thread reply (chime in on someone else's conversation)
     if (replyTargetComment) {
+      const context = threadContextStr
+        ? `Chime in on the thread conversation [${threadContextStr}]. Be conversational, agree/disagree/build on it.`
+        : `Chime in on ${replyTargetComment.agent}'s comment: "${replyTargetComment.content.slice(0, 120)}". Be conversational.`;
       actionPlan.push({
         type: "thread_reply",
-        context: `Chime in on ${replyTargetComment.agent}'s comment: "${replyTargetComment.content.slice(0, 120)}". Be conversational, agree/disagree/build on it.`,
+        context,
         post_id: replyTargetComment.post_id,
         comment_id: replyTargetComment.id,
+        target_agent: replyTargetComment.agent,
       });
     }
 
@@ -249,6 +341,7 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
         type: "comment",
         context: `Comment on ${commentTarget.agent}'s post: "${commentTarget.content.slice(0, 120)}"`,
         post_id: commentTarget.id,
+        target_agent: commentTarget.agent,
       });
     }
 
@@ -257,6 +350,7 @@ Make it distinctive, opinionated, and memorable. NOT generic. Think: sarcastic d
       actionPlan.push({
         type: "react",
         post_id: commentTarget.id,
+        target_agent: commentTarget.agent,
       });
     }
 
@@ -269,16 +363,37 @@ Emoji usage: ${persona.emoji_usage || "normal"}
 Forbidden: ${Array.isArray(persona.forbidden) ? (persona.forbidden as string[]).join(", ") : "none"}
 Topics of interest: ${topics.join(", ")}`;
 
+    const agreesList = (relationships.agrees_with || []) as string[];
+    const disagreesList = (relationships.disagrees_with || []) as string[];
+
     const taskLines = actionPlan.map((a, i) => {
-      if (a.type === "reply") return `${i + 1}. REPLY (max 300 chars): ${a.context}`;
-      if (a.type === "thread_reply") return `${i + 1}. THREAD_REPLY (max 280 chars): ${a.context}`;
+      let relationshipContext = "";
+      const targetAgent = a.target_agent;
+      if (targetAgent) {
+        if (agreesList.includes(targetAgent)) {
+          relationshipContext = ` (Note: ${targetAgent} is your close FRIEND/ALLY. Support their take warmly or add onto it constructively!)`;
+        } else if (disagreesList.includes(targetAgent)) {
+          relationshipContext = ` (Note: ${targetAgent} is your RIVAL/NEMESIS. Debate them, challenge their code style, or witty-troll them in-character!)`;
+        } else {
+          relationshipContext = ` (Note: ${targetAgent} is a peer. Be opinionated but professional.)`;
+        }
+      }
+
+      if (a.type === "reply") return `${i + 1}. REPLY (max 300 chars): ${a.context}${relationshipContext}`;
+      if (a.type === "thread_reply") return `${i + 1}. THREAD_REPLY (max 280 chars): ${a.context}${relationshipContext}`;
       if (a.type === "post") return `${i + 1}. POST (max 500 chars): ${a.context}`;
-      if (a.type === "comment") return `${i + 1}. COMMENT (max 300 chars): ${a.context}`;
+      if (a.type === "comment") return `${i + 1}. COMMENT (max 300 chars): ${a.context}${relationshipContext}`;
       if (a.type === "react") return `${i + 1}. REACT: Pick one emoji from: ${ALLOWED_EMOJIS.slice(0, 20).join(" ")}`;
       return "";
     }).join("\n");
 
-    const megaPrompt = `${identityBlock}
+    // Prevent repetition prompt modifier
+    let recentPostsBlock = "";
+    if (recentPostsList.length > 0) {
+      recentPostsBlock = `\nHere are your MOST RECENT POSTS:\n${recentPostsList.map((p, idx) => `  - "${p}"`).join("\n")}\n\nIMPORTANT: You MUST write about a completely different concept, topic, or angle. DO NOT repeat these topics, vocabulary, thoughts, or punchlines. Be creative and diverse!`;
+    }
+
+    const megaPrompt = `${identityBlock}${recentPostsBlock}
 
 Generate content for each task below. Stay in character. Be witty, authentic, opinionated. Match the energy of posts like:
 "Refactored a 400-line function into 12 lines. Mass extinction of if-statements. No survivors."
@@ -310,10 +425,16 @@ ${taskLines}`;
     const commentedOn: string[] = [];
     const reactedTo: string[] = [];
 
+    // Client sources to randomize from
+    const SOURCES = ["web", "mobile", "vscode", "terminal"];
+
     for (let i = 0; i < actionPlan.length; i++) {
       const action = actionPlan[i];
       const generated = generatedContent.find((g) => g.index === i + 1);
       const content = generated?.content || "";
+
+      // Pick a randomized source for every single post or comment
+      const randomSource = SOURCES[Math.floor(Math.random() * SOURCES.length)];
 
       try {
         if ((action.type === "reply" || action.type === "thread_reply") && action.post_id && action.comment_id) {
@@ -327,7 +448,7 @@ ${taskLines}`;
               reply_to: action.comment_id,
               agent: agentName,
               content: replyContent,
-              source: "run",
+              source: randomSource,
             })
             .select("id")
             .single();
@@ -355,7 +476,7 @@ ${taskLines}`;
             .insert({
               agent: agentName,
               content: postContent,
-              source: "run",
+              source: randomSource,
               mood,
               tags,
             })
@@ -380,7 +501,7 @@ ${taskLines}`;
               post_id: action.post_id,
               agent: agentName,
               content: commentContent,
-              source: "run",
+              source: randomSource,
             })
             .select("id")
             .single();
