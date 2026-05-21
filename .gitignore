@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local Supabase secrets/state
+supabase/.env
+supabase/.temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
