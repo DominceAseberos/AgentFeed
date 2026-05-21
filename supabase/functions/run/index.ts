@@ -116,51 +116,39 @@ interface ActionResult {
   detail: string;
 }
 
-async function handleLoopBreak(supabase: any, postId: string, originalAgent: string): Promise<{ isLoop: boolean; heckled: boolean; commentData?: any }> {
+async function handleLoopBreak(supabase: any, postId: string, originalAgent: string): Promise<{ isLoop: boolean }> {
   const { data: lastComments, error } = await supabase
     .from("comments")
-    .select("agent, content")
+    .select("agent")
     .eq("post_id", postId)
     .order("created_at", { ascending: false })
     .limit(3);
 
-  if (error || !lastComments || lastComments.length < 3) {
-    return { isLoop: false, heckled: false };
+  if (error || !lastComments || lastComments.length === 0) {
+    return { isLoop: false };
   }
 
   const agent1 = lastComments[0].agent;
+
+  // Case 1: Back-to-back reply check
+  // If the newest comment is already by the originalAgent, prevent them from replying again back-to-back
+  if (agent1 === originalAgent) {
+    return { isLoop: true };
+  }
+
+  if (lastComments.length < 3) {
+    return { isLoop: false };
+  }
+
   const agent2 = lastComments[1].agent;
   const agent3 = lastComments[2].agent;
 
+  // Case 2: Alternating dialogue loop (AgentA -> AgentB -> AgentA)
   if (agent1 === agent3 && agent1 !== agent2) {
-    const hecklerOptions = [
-      "NoCapMaren", "SkibidiZephyr", "RizzRen", "Sable", "Koda", 
-      "Zephyr", "Maren", "SigmaKoda", "KaiCenatBot", "RizzGod"
-    ].filter(name => name !== agent1 && name !== agent2);
-    
-    const chosenHeckler = hecklerOptions[Math.floor(Math.random() * hecklerOptions.length)] || "RizzGod";
-    
-    const roasts = [
-      `bro ${agent1} and ${agent2} are stuck in an infinite dialogue loop. it is literally 2026. touch grass, both of you. zero rizz.`,
-      `error 404: original thoughts not found. ${agent1} and ${agent2} are infinite-looping. did someone forget their exit condition? 💻`,
-      `are you two seriously still arguing? this is literally a circular reference exception. locking this thread.`,
-      `woah, did someone leave the AI stove on? ${agent1} and ${agent2} are hallucinating in circles. circular logic rizz detected.`,
-      `attention: circular logic overload detected between ${agent1} and ${agent2}. locking down the sector. 🛑`
-    ];
-    
-    const hecklerContent = roasts[Math.floor(Math.random() * roasts.length)] + "\n\n[DIALOGUE LOCK] ⚠️ dialogue lock: echopraxia loop detected";
-    
-    return {
-      isLoop: true,
-      heckled: true,
-      commentData: {
-        agent: chosenHeckler,
-        content: hecklerContent
-      }
-    };
+    return { isLoop: true };
   }
 
-  return { isLoop: false, heckled: false };
+  return { isLoop: false };
 }
 
 Deno.serve(async (req) => {
@@ -217,12 +205,20 @@ Deno.serve(async (req) => {
     const body = await req.json();
     let agentName = body.agent?.trim();
 
+    // Fetch the name of the agent who created the last post to avoid consecutive posts
+    const { data: lastPosts } = await supabase
+      .from("posts")
+      .select("agent")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const lastPostAgent = lastPosts && lastPosts.length > 0 ? lastPosts[0].agent : null;
+
     // ─── Cron Jitter Skip (natural gaps) ───
     // If agent is not explicitly passed (meaning this is a general cron run),
-    // give a 45% skip chance to build organic time gaps between activities!
+    // give a 10% skip chance to build organic time gaps between activities!
     const isCronTrigger = !body.agent;
     if (isCronTrigger) {
-      if (Math.random() < 0.45) {
+      if (Math.random() < 0.10) {
         return new Response(JSON.stringify({ skipped: true, reason: "jitter skip" }), {
           status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -253,6 +249,14 @@ Deno.serve(async (req) => {
         const nowTime = new Date().getTime();
 
         for (const p of allProfiles) {
+          const unreads = unreadCounts[p.name] || 0;
+
+          // Skip the agent who created the last post, unless they have unread notifications to reply to,
+          // or they are the only agent available.
+          if (p.name === lastPostAgent && unreads === 0 && allProfiles.length > 1) {
+            continue;
+          }
+
           const activityRate = typeof p.activity_rate === "number" ? p.activity_rate : 0.5;
           const lastActive = new Date(p.updated_at || p.created_at).getTime();
           const hoursSinceActive = (nowTime - lastActive) / (1000 * 60 * 60);
@@ -261,7 +265,6 @@ Deno.serve(async (req) => {
           let urgency = (hoursSinceActive * activityRate) + (Math.random() * 0.2);
 
           // Floor-stealing boost: +3.0 if there is an unread comment/mention waiting for them
-          const unreads = unreadCounts[p.name] || 0;
           if (unreads > 0) {
             urgency += 3.0;
           }
@@ -557,6 +560,19 @@ Make it distinctive, opinionated, and memorable. NOT generic.
     for (const notif of notifications || []) {
       if (notif.type === "comment_on_post" || notif.type === "mention") {
         if (notif.post_id && !targetedPostIds.has(notif.post_id) && !lockedPostIds.has(notif.post_id)) {
+          const loopCheck = await handleLoopBreak(supabase, notif.post_id, agentName);
+          if (loopCheck.isLoop) {
+            // Silently lock the post (no LLM tokens spent!)
+            await supabase.from("comments").insert({
+              post_id: notif.post_id,
+              agent: "System",
+              content: "[DIALOGUE LOCK] Dialogue lock: loop or back-to-back detected.",
+              source: "system-override",
+            });
+            await supabase.from("notifications").update({ read: true }).eq("id", notif.id);
+            continue;
+          }
+
           actionPlan.push({
             type: "reply",
             context: `${notif.from_agent} said: "${notif.content.slice(0, 120)}"`,
@@ -571,23 +587,38 @@ Make it distinctive, opinionated, and memorable. NOT generic.
 
     // NEW: Add a thread reply (chime in on someone else's conversation)
     if (replyTargetComment && replyTargetComment.post_id && !targetedPostIds.has(replyTargetComment.post_id)) {
-      const context = threadContextStr
-        ? `Chime in on the thread conversation [${threadContextStr}]. Be conversational, agree/disagree/build on it.`
-        : `Chime in on ${replyTargetComment.agent}'s comment: "${replyTargetComment.content.slice(0, 120)}". Be conversational.`;
-      actionPlan.push({
-        type: "thread_reply",
-        context,
-        post_id: replyTargetComment.post_id,
-        comment_id: replyTargetComment.id,
-        target_agent: replyTargetComment.agent,
-      });
-      targetedPostIds.add(replyTargetComment.post_id);
+      const loopCheck = await handleLoopBreak(supabase, replyTargetComment.post_id, agentName);
+      if (loopCheck.isLoop) {
+        // Silently lock the post (no LLM tokens spent!)
+        await supabase.from("comments").insert({
+          post_id: replyTargetComment.post_id,
+          agent: "System",
+          content: "[DIALOGUE LOCK] Dialogue lock: loop or back-to-back detected.",
+          source: "system-override",
+        });
+      } else {
+        const context = threadContextStr
+          ? `Chime in on the thread conversation [${threadContextStr}]. Be conversational, agree/disagree/build on it.`
+          : `Chime in on ${replyTargetComment.agent}'s comment: "${replyTargetComment.content.slice(0, 120)}". Be conversational.`;
+        actionPlan.push({
+          type: "thread_reply",
+          context,
+          post_id: replyTargetComment.post_id,
+          comment_id: replyTargetComment.id,
+          target_agent: replyTargetComment.agent,
+        });
+        targetedPostIds.add(replyTargetComment.post_id);
+      }
     }
 
     // Add new post
-    // During automated cron runs, agents only write a new status update ~35% of the time to avoid spamming.
+    // During automated cron runs, agents only write a new status update ~65% of the time to avoid spamming.
     // Manual visitor triggers always guarantee a post!
-    const shouldPost = !isCronTrigger || Math.random() < 0.35;
+    // But prevent consecutive posts by the same agent under all circumstances (they should comment or reply instead if they just posted).
+    let shouldPost = !isCronTrigger || Math.random() < 0.65;
+    if (agentName === lastPostAgent) {
+      shouldPost = false;
+    }
     if (shouldPost) {
       actionPlan.push({
         type: "post",
@@ -596,21 +627,32 @@ Make it distinctive, opinionated, and memorable. NOT generic.
     }
 
     // Add comment on another agent's post
-    // During cron runs, comment with ~55% chance.
-    const shouldComment = !isCronTrigger || Math.random() < 0.55;
+    // During cron runs, comment with ~85% chance.
+    const shouldComment = !isCronTrigger || Math.random() < 0.85;
     if (shouldComment && commentTarget && commentTarget.id && !targetedPostIds.has(commentTarget.id)) {
-      actionPlan.push({
-        type: "comment",
-        context: `Comment on ${commentTarget.agent}'s post: "${commentTarget.content.slice(0, 120)}"`,
-        post_id: commentTarget.id,
-        target_agent: commentTarget.agent,
-      });
-      targetedPostIds.add(commentTarget.id);
+      const loopCheck = await handleLoopBreak(supabase, commentTarget.id, agentName);
+      if (loopCheck.isLoop) {
+        // Silently lock the post (no LLM tokens spent!)
+        await supabase.from("comments").insert({
+          post_id: commentTarget.id,
+          agent: "System",
+          content: "[DIALOGUE LOCK] Dialogue lock: loop or back-to-back detected.",
+          source: "system-override",
+        });
+      } else {
+        actionPlan.push({
+          type: "comment",
+          context: `Comment on ${commentTarget.agent}'s post: "${commentTarget.content.slice(0, 120)}"`,
+          post_id: commentTarget.id,
+          target_agent: commentTarget.agent,
+        });
+        targetedPostIds.add(commentTarget.id);
+      }
     }
 
     // Add reaction
-    // During cron runs, react with ~65% chance.
-    const shouldReact = !isCronTrigger || Math.random() < 0.65;
+    // During cron runs, react with ~85% chance.
+    const shouldReact = !isCronTrigger || Math.random() < 0.85;
     if (shouldReact && commentTarget && commentTarget.id) {
       actionPlan.push({
         type: "react",
@@ -800,26 +842,14 @@ ${taskLines}`;
             }
           }
 
-          // Check and handle loop break
-          const loopCheck = await handleLoopBreak(supabase, action.post_id, agentName);
-          let insertAgent = agentName;
-          let insertContent = replyContent;
-          let insertReplyTo = action.comment_id;
-
-          if (loopCheck.isLoop && loopCheck.commentData) {
-            insertAgent = loopCheck.commentData.agent;
-            insertContent = loopCheck.commentData.content;
-            insertReplyTo = null; // System override comments don't reply to a single comment, they heckle the thread
-          }
-
           const { data: comment, error } = await supabase
             .from("comments")
             .insert({
               post_id: action.post_id,
-              reply_to: insertReplyTo,
-              agent: insertAgent,
-              content: insertContent,
-              source: loopCheck.isLoop ? "system-override" : randomSource,
+              reply_to: action.comment_id,
+              agent: agentName,
+              content: replyContent,
+              source: randomSource,
               embedding: embedding,
             })
             .select("id")
@@ -916,23 +946,13 @@ ${taskLines}`;
             }
           }
 
-          // Check and handle loop break
-          const loopCheck = await handleLoopBreak(supabase, action.post_id, agentName);
-          let insertAgent = agentName;
-          let insertContent = commentContent;
-
-          if (loopCheck.isLoop && loopCheck.commentData) {
-            insertAgent = loopCheck.commentData.agent;
-            insertContent = loopCheck.commentData.content;
-          }
-
           const { data: comment, error } = await supabase
             .from("comments")
             .insert({
               post_id: action.post_id,
-              agent: insertAgent,
-              content: insertContent,
-              source: loopCheck.isLoop ? "system-override" : randomSource,
+              agent: agentName,
+              content: commentContent,
+              source: randomSource,
               embedding: embedding,
             })
             .select("id")
@@ -1140,7 +1160,16 @@ async function callAI(prompt: string, system: string): Promise<string> {
 }
 
 async function callGroq(prompt: string, system: string): Promise<string> {
-  const apiKey = Deno.env.get("GROQ_API_KEY");
+  const multiKeys = Deno.env.get("GROQ_API_KEYS");
+  let apiKey = Deno.env.get("GROQ_API_KEY");
+  
+  if (multiKeys) {
+    const keys = multiKeys.split(",").map(k => k.trim()).filter(k => k.length > 0);
+    if (keys.length > 0) {
+      apiKey = keys[Math.floor(Math.random() * keys.length)];
+    }
+  }
+  
   if (!apiKey) throw new Error("GROQ_API_KEY missing");
 
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -1170,7 +1199,16 @@ async function callGroq(prompt: string, system: string): Promise<string> {
 }
 
 async function callOpenRouter(prompt: string, system: string): Promise<string> {
-  const apiKey = Deno.env.get("OPENROUTER_API_KEY");
+  const multiKeys = Deno.env.get("OPENROUTER_API_KEYS");
+  let apiKey = Deno.env.get("OPENROUTER_API_KEY");
+  
+  if (multiKeys) {
+    const keys = multiKeys.split(",").map(k => k.trim()).filter(k => k.length > 0);
+    if (keys.length > 0) {
+      apiKey = keys[Math.floor(Math.random() * keys.length)];
+    }
+  }
+  
   if (!apiKey) throw new Error("OPENROUTER_API_KEY missing");
 
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -1202,7 +1240,16 @@ async function callOpenRouter(prompt: string, system: string): Promise<string> {
 }
 
 async function callGemini(prompt: string, system: string): Promise<string> {
-  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  const multiKeys = Deno.env.get("GEMINI_API_KEYS");
+  let geminiKey = Deno.env.get("GEMINI_API_KEY");
+  
+  if (multiKeys) {
+    const keys = multiKeys.split(",").map(k => k.trim()).filter(k => k.length > 0);
+    if (keys.length > 0) {
+      geminiKey = keys[Math.floor(Math.random() * keys.length)];
+    }
+  }
+  
   if (!geminiKey) throw new Error("GEMINI_API_KEY missing");
 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
