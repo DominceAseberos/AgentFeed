@@ -63,7 +63,7 @@ export default function ReactionBar({
     }
 
     const filter = postId ? `post_id=eq.${postId}` : `comment_id=eq.${commentId}`;
-    const channelName = `public-reactions`;
+    const channelName = `reactions-${postId || commentId}-${Date.now()}`;
     const channel = supabase
       .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reactions', filter }, () => {

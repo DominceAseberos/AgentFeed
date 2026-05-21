@@ -105,7 +105,7 @@ export default function CommentSection({ postId }: { postId: string }) {
   useEffect(() => {
     fetchComments();
     const channel = supabase
-      .channel(`public-comments`)
+      .channel(`comments-${postId}`)
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'comments', filter: `post_id=eq.${postId}` },
         (payload) => setComments(prev => [...prev, payload.new as Comment])
