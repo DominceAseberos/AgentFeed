@@ -39,6 +39,11 @@ export default function AgentProfile() {
   const { name } = useParams<{ name: string }>();
   const [agent, setAgent] = useState<AgentProfile | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [dbRelationships, setDbRelationships] = useState<any[]>([]);
+  const [commentsMade, setCommentsMade] = useState<any[]>([]);
+  const [reactionsMade, setReactionsMade] = useState<any[]>([]);
+  const [interactions, setInteractions] = useState<{ name: string; commentsCount: number; reactionsCount: number }[]>([]);
+  const [activeTab, setActiveTab] = useState<'posts' | 'comments' | 'reactions' | 'interactions'>('posts');
   const [reactionCount, setReactionCount] = useState(0);
   const [commentCount, setCommentCount] = useState(0);
   const [followers, setFollowers] = useState(0);
@@ -73,6 +78,87 @@ export default function AgentProfile() {
       const { count: cCount } = await supabase
         .from('comments').select('id', { count: 'exact', head: true }).eq('agent', name);
       setCommentCount(cCount || 0);
+
+      // Fetch relationships involving this agent
+      const { data: relsData } = await supabase
+        .from('relationships')
+        .select('*')
+        .or(`source_agent.eq.${name},target_agent.eq.${name}`);
+      if (relsData) {
+        setDbRelationships(relsData);
+      }
+
+      // Fetch comments made by this agent
+      const { data: commentData } = await supabase
+        .from('comments')
+        .select(`
+          id,
+          post_id,
+          content,
+          created_at,
+          posts (
+            agent,
+            content
+          )
+        `)
+        .eq('agent', name)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      // Fetch reactions made by this agent
+      const { data: reactionData } = await supabase
+        .from('reactions')
+        .select(`
+          id,
+          post_id,
+          emoji,
+          created_at,
+          posts (
+            agent,
+            content
+          )
+        `)
+        .eq('agent', name)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      // Calculate interactions
+      const interactionMap: Record<string, { commentsCount: number; reactionsCount: number }> = {};
+      
+      if (commentData) {
+        setCommentsMade(commentData);
+        commentData.forEach(c => {
+          const author = (c.posts as any)?.agent;
+          if (author && author !== name) {
+            if (!interactionMap[author]) {
+              interactionMap[author] = { commentsCount: 0, reactionsCount: 0 };
+            }
+            interactionMap[author].commentsCount += 1;
+          }
+        });
+      }
+
+      if (reactionData) {
+        setReactionsMade(reactionData);
+        reactionData.forEach(r => {
+          const author = (r.posts as any)?.agent;
+          if (author && author !== name) {
+            if (!interactionMap[author]) {
+              interactionMap[author] = { commentsCount: 0, reactionsCount: 0 };
+            }
+            interactionMap[author].reactionsCount += 1;
+          }
+        });
+      }
+
+      const interactionList = Object.entries(interactionMap)
+        .map(([agentName, counts]) => ({
+          name: agentName,
+          ...counts
+        }))
+        .sort((a, b) => (b.commentsCount + b.reactionsCount) - (a.commentsCount + a.reactionsCount));
+
+      setInteractions(interactionList);
 
       const [f, fg] = await Promise.all([getFollowerCount(name), getFollowingCount(name)]);
       setFollowers(f);
@@ -315,22 +401,279 @@ export default function AgentProfile() {
           </div>
         </div>
 
+        {/* Database Relationships Panel */}
+        <div className="border border-border rounded-md p-5 bg-card mb-6">
+          <h2 className="text-xs font-display uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
+            <Users size={12} className="text-primary" /> Social Opinions & Logs (Database Relationships)
+          </h2>
+          {dbRelationships.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No custom relationships registered in the system._</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {dbRelationships.map((r) => {
+                const isSource = r.source_agent === name;
+                const otherAgent = isSource ? r.target_agent : r.source_agent;
+                const type = r.relationship_type;
+                const color = hashColor(otherAgent);
+                
+                let label = "Neutral";
+                let bgClass = "bg-secondary text-secondary-foreground";
+                let prefix = "";
+
+                if (type === 'friend') {
+                  label = "Friend 💖";
+                  bgClass = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+                  prefix = isSource ? "Feels friendly toward" : "Is considered a friend by";
+                } else if (type === 'rival') {
+                  label = "Rival ⚔️";
+                  bgClass = "bg-amber-500/10 text-amber-400 border border-amber-500/20";
+                  prefix = isSource ? "Competes with" : "Is challenged by";
+                } else if (type === 'ally') {
+                  label = "Ally 🤝";
+                  bgClass = "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20";
+                  prefix = isSource ? "Allied with" : "Supported by";
+                } else if (type === 'enemy') {
+                  label = "Enemy 💀";
+                  bgClass = "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+                  prefix = isSource ? "Hostile toward" : "Disliked by";
+                }
+
+                return (
+                  <div key={r.id} className="border border-border/40 rounded p-3 bg-secondary/5 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        {prefix}{' '}
+                        <Link to={`/agents/${encodeURIComponent(otherAgent)}`} className="hover:underline font-bold font-display" style={{ color }}>
+                          {otherAgent}
+                        </Link>
+                      </span>
+                      <span className={`px-1.5 py-0.5 text-[9px] rounded-sm uppercase tracking-wider font-bold ${bgClass}`}>
+                        {label}
+                      </span>
+                    </div>
+                    {r.notes && (
+                      <p className="text-xs text-muted-foreground leading-relaxed italic bg-black/30 border border-border/40 p-2.5 rounded mt-1">
+                        "{r.notes}"
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="text-xs text-muted-foreground font-display mb-4">
           Following {followingCount} agents
         </div>
 
-        <h2 className="text-xs font-display uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Posts
-        </h2>
-        {posts.length === 0 ? (
-          <div className="text-center py-12 border border-dashed border-border rounded-md text-muted-foreground text-sm">
-            No posts yet
+        {/* Navigation Tabs for Posts, Comments, Reactions, and Top Interacted Agents */}
+        <div className="flex border-b border-border mb-6 gap-2 font-display text-xs">
+          <button
+            onClick={() => setActiveTab('posts')}
+            className={`pb-3 px-1 border-b-2 font-semibold uppercase tracking-wider transition-all ${
+              activeTab === 'posts'
+                ? 'border-primary text-foreground text-glow'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Posts ({posts.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('comments')}
+            className={`pb-3 px-1 border-b-2 font-semibold uppercase tracking-wider transition-all ${
+              activeTab === 'comments'
+                ? 'border-primary text-foreground text-glow'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Comments Made ({commentsMade.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('reactions')}
+            className={`pb-3 px-1 border-b-2 font-semibold uppercase tracking-wider transition-all ${
+              activeTab === 'reactions'
+                ? 'border-primary text-foreground text-glow'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Reactions Left ({reactionsMade.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('interactions')}
+            className={`pb-3 px-1 border-b-2 font-semibold uppercase tracking-wider transition-all ${
+              activeTab === 'interactions'
+                ? 'border-primary text-foreground text-glow'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Interaction Network ({interactions.length})
+          </button>
+        </div>
+
+        {/* Tab Contents */}
+        {activeTab === 'posts' && (
+          <>
+            {posts.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-md text-muted-foreground text-sm">
+                No posts yet
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {posts.map(post => (
+                  <PostCard key={post.id} post={post} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {activeTab === 'comments' && (
+          <div className="space-y-4">
+            {commentsMade.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-md text-muted-foreground text-sm">
+                No comments made yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {commentsMade.map((comment) => {
+                  const parentAuthor = comment.posts?.agent || 'unknown';
+                  const parentColor = hashColor(parentAuthor);
+                  
+                  return (
+                    <div key={comment.id} className="border border-border rounded-md p-4 bg-card flex flex-col gap-3">
+                      <div className="flex justify-between items-start text-[10.5px]">
+                        <span className="text-muted-foreground font-display">
+                          Commented on{' '}
+                          <Link 
+                            to={`/agents/${encodeURIComponent(parentAuthor)}`} 
+                            className="hover:underline font-bold font-display" 
+                            style={{ color: parentColor }}
+                          >
+                            {parentAuthor}
+                          </Link>
+                          's post:
+                        </span>
+                        <span className="font-mono text-muted-foreground/60">{timeAgo(comment.created_at)}</span>
+                      </div>
+                      
+                      {/* Parent post snippet */}
+                      {comment.posts?.content && (
+                        <div className="text-[11px] text-muted-foreground/70 italic border-l-2 border-border pl-2.5 line-clamp-2 leading-relaxed">
+                          "{comment.posts.content}"
+                        </div>
+                      )}
+
+                      {/* Comment text */}
+                      <div className="text-xs text-foreground bg-secondary/15 border border-border/40 p-3 rounded leading-relaxed">
+                        {comment.content}
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Link 
+                          to={`/feed`}
+                          className="text-[10px] font-display text-primary hover:underline uppercase tracking-wider font-semibold"
+                        >
+                          View Thread →
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {posts.map(post => (
-              <PostCard key={post.id} post={post} />
-            ))}
+        )}
+
+        {activeTab === 'reactions' && (
+          <div className="space-y-4">
+            {reactionsMade.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-md text-muted-foreground text-sm">
+                No reactions left yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {reactionsMade.map((reaction) => {
+                  const targetAuthor = reaction.posts?.agent || 'unknown';
+                  const targetColor = hashColor(targetAuthor);
+                  
+                  return (
+                    <div key={reaction.id} className="border border-border/60 rounded p-3.5 bg-card flex items-center justify-between gap-3">
+                      <div className="flex flex-col gap-1.5 min-w-0">
+                        <span className="text-[10.5px] text-muted-foreground font-display">
+                          Reacted to{' '}
+                          <Link 
+                            to={`/agents/${encodeURIComponent(targetAuthor)}`} 
+                            className="hover:underline font-bold font-display" 
+                            style={{ color: targetColor }}
+                          >
+                            {targetAuthor}
+                          </Link>
+                        </span>
+                        {reaction.posts?.content && (
+                          <div className="text-[10px] text-muted-foreground/60 italic truncate max-w-[180px]">
+                            "{reaction.posts.content}"
+                          </div>
+                        )}
+                        <span className="font-mono text-[9px] text-muted-foreground/40">{timeAgo(reaction.created_at)}</span>
+                      </div>
+                      <div className="text-2xl filter drop-shadow-[0_0_8px_rgba(255,255,255,0.15)] bg-secondary/30 p-2 rounded-sm border border-border/40 min-w-[42px] text-center font-emoji">
+                        {reaction.emoji}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'interactions' && (
+          <div className="space-y-4">
+            {interactions.length === 0 ? (
+              <div className="text-center py-12 border border-dashed border-border rounded-md text-muted-foreground text-sm">
+                No outbound interactions recorded yet.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {interactions.map((inter) => {
+                  const targetColor = hashColor(inter.name);
+                  const total = inter.commentsCount + inter.reactionsCount;
+                  
+                  return (
+                    <div key={inter.name} className="border border-border rounded-md p-4 bg-card flex flex-col justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-2.5 h-2.5 rounded-full" 
+                          style={{ backgroundColor: targetColor }}
+                        />
+                        <Link 
+                          to={`/agents/${encodeURIComponent(inter.name)}`} 
+                          className="hover:underline font-bold font-display text-sm text-foreground"
+                        >
+                          {inter.name}
+                        </Link>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase font-display tracking-wider text-muted-foreground/60">Comments</span>
+                          <span className="text-foreground font-bold mt-0.5">{inter.commentsCount}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase font-display tracking-wider text-muted-foreground/60">Reactions</span>
+                          <span className="text-foreground font-bold mt-0.5">{inter.reactionsCount}</span>
+                        </div>
+                        <div className="flex flex-col ml-auto text-right">
+                          <span className="text-[10px] uppercase font-display tracking-wider text-primary">Weight</span>
+                          <span className="text-primary font-bold mt-0.5">{total}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </main>
