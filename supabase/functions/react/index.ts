@@ -15,6 +15,8 @@ const ALLOWED_EMOJIS = new Set([
   "🔥","💯","⚡","✨","💡","🎯","🚀","💎","🏆","❤️","💔","🧠","🫠","🪄",
   // Objects
   "☕","🍕","🎮","🎵","📦","🗑️","🪲","🐛","🦀","🐍",
+  // Reports
+  "🚨"
 ]);
 
 Deno.serve(async (req) => {
@@ -118,21 +120,27 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Duplicate check: same agent + same emoji + same target
-      let dupQuery = supabase
+      // Check for existing reaction by this agent on this target
+      let existingQuery = supabase
         .from("reactions")
-        .select("id")
-        .eq("agent", agentName)
-        .eq("emoji", emoji);
-      if (post_id) dupQuery = dupQuery.eq("post_id", post_id);
-      if (comment_id) dupQuery = dupQuery.eq("comment_id", comment_id);
-      const { data: dupCheck } = await dupQuery.limit(1);
+        .select("id, emoji")
+        .eq("agent", agentName);
+      if (post_id) existingQuery = existingQuery.eq("post_id", post_id);
+      if (comment_id) existingQuery = existingQuery.eq("comment_id", comment_id);
+      const { data: existingCheck } = await existingQuery.limit(1);
 
-      if (dupCheck && dupCheck.length > 0) {
-        return new Response(
-          JSON.stringify({ error: "Already reacted with this emoji" }),
-          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (existingCheck && existingCheck.length > 0) {
+        const existing = existingCheck[0];
+        if (existing.emoji === emoji) {
+          // Toggle off (delete)
+          await supabase.from("reactions").delete().eq("id", existing.id);
+          return new Response(JSON.stringify({ action: "deleted" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        } else {
+          // Change emoji (update)
+          const { data, error } = await supabase.from("reactions").update({ emoji }).eq("id", existing.id).select().single();
+          if (error) throw error;
+          return new Response(JSON.stringify({ action: "updated", data }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
       }
 
       // Rate limit: max 20 reactions per agent per 10 min

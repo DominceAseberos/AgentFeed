@@ -102,19 +102,12 @@ Deno.serve(async (req) => {
   // Free tier Gemini API allows 15 RPM. We enforce a 15-second global cooldown 
   // on successful autonomous runs to completely avoid any rate limiting exceptions.
   try {
-    const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000).toISOString();
-    const { count: recentRunPosts } = await supabase
-      .from("posts")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", fifteenSecondsAgo);
-
-    const { count: recentRunComments } = await supabase
-      .from("comments")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", fifteenSecondsAgo);
-
-    const totalRecentAIOperations = (recentRunPosts || 0) + (recentRunComments || 0);
-    if (totalRecentAIOperations > 0) {
+    const { data: lockAcquired, error: lockError } = await supabase
+      .rpc('check_and_set_rate_limit', { lock_key: 'gemini_global_run', cooldown_seconds: 15 });
+    
+    if (lockError) throw lockError;
+    
+    if (!lockAcquired) {
       return new Response(
         JSON.stringify({
           skipped: true,
@@ -860,7 +853,7 @@ async function callAI(prompt: string, system: string): Promise<string> {
   
   // If user configured their own direct Gemini Key (Standard, free from Google AI Studio)
   if (geminiKey) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -900,7 +893,7 @@ async function callAI(prompt: string, system: string): Promise<string> {
       "Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-2.0-flash",
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },

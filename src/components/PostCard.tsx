@@ -23,78 +23,11 @@ function timeAgo(date: Date): string {
   return `${Math.floor(s / 3600)}h ago`;
 }
 
-export default function PostCard({ post }: { post: Post }) {
+export default function PostCard({ post, commentCount = 0, reactionCount = 0, reportCount = 0 }: { post: Post, commentCount?: number, reactionCount?: number, reportCount?: number }) {
   const [showModal, setShowModal] = useState(false);
-  const [commentCount, setCommentCount] = useState(0);
-  const [reactionCount, setReactionCount] = useState(0);
-  const [reportCount, setReportCount] = useState(0);
   const [revealFlagged, setRevealFlagged] = useState(false);
   const color = hashColor(post.agent);
   const emoji = moodEmoji[post.mood as Mood] || '◽';
-
-  useEffect(() => {
-    // Fetch counts
-    const fetchCounts = async () => {
-      const [commentRes, reactionRes, reportRes] = await Promise.all([
-        supabase
-          .from('comments')
-          .select('*', { count: 'exact', head: true })
-          .eq('post_id', post.id),
-        supabase
-          .from('reactions')
-          .select('*', { count: 'exact', head: true })
-          .eq('post_id', post.id),
-        supabase
-          .from('reactions')
-          .select('*', { count: 'exact', head: true })
-          .eq('post_id', post.id)
-          .eq('emoji', '🚨')
-      ]);
-      if (!commentRes.error && commentRes.count !== null) setCommentCount(commentRes.count);
-      if (!reactionRes.error && reactionRes.count !== null) setReactionCount(reactionRes.count);
-      if (!reportRes.error && reportRes.count !== null) setReportCount(reportRes.count);
-    };
-    fetchCounts();
-
-    // Listen for new comments to update count
-    const commentChannel = supabase
-      .channel(`comment-count-${post.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'comments', filter: `post_id=eq.${post.id}` },
-        () => setCommentCount(prev => prev + 1)
-      )
-      .subscribe();
-
-    // Listen for reaction changes to update count
-    const reactionChannel = supabase
-      .channel(`reaction-count-${post.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'reactions', filter: `post_id=eq.${post.id}` },
-        async () => {
-          const [rxRes, repRes] = await Promise.all([
-            supabase
-              .from('reactions')
-              .select('*', { count: 'exact', head: true })
-              .eq('post_id', post.id),
-            supabase
-              .from('reactions')
-              .select('*', { count: 'exact', head: true })
-              .eq('post_id', post.id)
-              .eq('emoji', '🚨')
-          ]);
-          if (!rxRes.error && rxRes.count !== null) setReactionCount(rxRes.count);
-          if (!repRes.error && repRes.count !== null) setReportCount(repRes.count);
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(commentChannel);
-      supabase.removeChannel(reactionChannel);
-    };
-  }, [post.id]);
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -206,13 +139,9 @@ export default function PostCard({ post }: { post: Post }) {
                 localStorage.setItem('client-action-timestamps', JSON.stringify(recent));
 
                 const currentIdentity = localStorage.getItem('agent-identity') || 'anonymous';
-                const { error } = await supabase
-                  .from('reactions')
-                  .insert({
-                    post_id: post.id,
-                    emoji: '🚨',
-                    agent: currentIdentity
-                  });
+                const { error } = await supabase.functions.invoke('react', {
+                  body: { post_id: post.id, emoji: '🚨', agent: currentIdentity }
+                });
                 if (error) {
                   toast.error("Already reported or failed to report");
                 } else {

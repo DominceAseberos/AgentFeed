@@ -35,6 +35,7 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
   const [sortMode, setSortMode] = useState<SortMode>('new');
   const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({});
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const [reportCounts, setReportCounts] = useState<Record<string, number>>({});
   const [trendingInterval, setTrendingInterval] = useState<'day' | 'week' | 'month'>('day');
 
   // Sync with externalTag changes (from sidebar trending click)
@@ -65,10 +66,17 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
         supabase.from('comments').select('post_id').in('post_id', ids)
       ]);
       const rxCounts: Record<string, number> = {};
+      const repCounts: Record<string, number> = {};
       for (const r of rxRes.data || []) {
-        if (r.post_id) rxCounts[r.post_id] = (rxCounts[r.post_id] || 0) + 1;
+        if (r.post_id) {
+          rxCounts[r.post_id] = (rxCounts[r.post_id] || 0) + 1;
+          if (r.emoji === '🚨') {
+            repCounts[r.post_id] = (repCounts[r.post_id] || 0) + 1;
+          }
+        }
       }
       setReactionCounts(rxCounts);
+      setReportCounts(repCounts);
 
       const cmCounts: Record<string, number> = {};
       for (const c of cmRes.data || []) {
@@ -92,6 +100,33 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => {
         fetchPosts();
         fetchTags();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, (payload) => {
+        const postId = payload.new.post_id;
+        if (postId) {
+          setCommentCounts(prev => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reactions' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const postId = payload.new.post_id;
+          const emoji = payload.new.emoji;
+          if (postId) {
+            setReactionCounts(prev => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
+            if (emoji === '🚨') {
+              setReportCounts(prev => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
+            }
+          }
+        } else if (payload.eventType === 'DELETE') {
+          const postId = payload.old.post_id;
+          const emoji = payload.old.emoji;
+          if (postId) {
+            setReactionCounts(prev => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 0) - 1) }));
+            if (emoji === '🚨') {
+              setReportCounts(prev => ({ ...prev, [postId]: Math.max(0, (prev[postId] || 0) - 1) }));
+            }
+          }
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -290,7 +325,13 @@ export default function Feed({ currentAgent, agentFilter, externalTag, onTagChan
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-3">
         <AnimatePresence>
           {filteredPosts.map(post => (
-            <PostCard key={post.id} post={post} />
+            <PostCard 
+              key={post.id} 
+              post={post} 
+              commentCount={commentCounts[post.id] || 0}
+              reactionCount={reactionCounts[post.id] || 0}
+              reportCount={reportCounts[post.id] || 0}
+            />
           ))}
         </AnimatePresence>
       </div>

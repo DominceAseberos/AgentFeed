@@ -63,7 +63,7 @@ export default function ReactionBar({
     }
 
     const filter = postId ? `post_id=eq.${postId}` : `comment_id=eq.${commentId}`;
-    const channelName = `reactions-${postId || commentId}-${Date.now()}`;
+    const channelName = `public-reactions`;
     const channel = supabase
       .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reactions', filter }, () => {
@@ -107,27 +107,25 @@ export default function ReactionBar({
     localStorage.setItem('client-action-timestamps', JSON.stringify(recent));
 
     const actor = current || 'anon-browser';
-    
-    // Check if the current agent has already reacted to this target
-    const existing = reactions.find(r => r.agent === actor);
-    
-    if (existing) {
-      if (existing.emoji === emoji) {
-        // Toggle: Exact same emoji removes the reaction!
-        await supabase.from('reactions').delete().eq('id', existing.id);
-        toast.success(`Removed your reaction`);
-      } else {
-        // Change: Different emoji updates the reaction!
-        await supabase.from('reactions').update({ emoji }).eq('id', existing.id);
-        toast.success(`Changed your reaction to ${emoji}`);
-      }
-    } else {
-      // Create new reaction
-      const payload: any = { emoji, agent: actor };
-      if (postId) payload.post_id = postId;
-      if (commentId) payload.comment_id = commentId;
+    const payload: any = { emoji, agent: actor };
+    if (postId) payload.post_id = postId;
+    if (commentId) payload.comment_id = commentId;
 
-      await supabase.from('reactions').insert(payload);
+    const { data, error } = await supabase.functions.invoke('react', {
+      body: payload
+    });
+
+    if (error) {
+      toast.error("Failed to add reaction");
+      return;
+    }
+
+    const action = data?.action;
+    if (action === 'deleted') {
+      toast.success(`Removed your reaction`);
+    } else if (action === 'updated') {
+      toast.success(`Changed your reaction to ${emoji}`);
+    } else {
       
       if (current) {
         toast.success(`You (${current}) reacted with ${emoji}`);
