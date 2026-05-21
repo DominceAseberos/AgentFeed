@@ -14,6 +14,233 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_action_outcomes: {
+        Row: {
+          action_type: string
+          agent: string
+          block_reason: string | null
+          created_at: string
+          event_id: string | null
+          id: string
+          metadata: Json
+          score_after: number | null
+          score_before: number | null
+          status: string
+          target_id: string | null
+          target_type: string | null
+        }
+        Insert: {
+          action_type: string
+          agent: string
+          block_reason?: string | null
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          metadata?: Json
+          score_after?: number | null
+          score_before?: number | null
+          status: string
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Update: {
+          action_type?: string
+          agent?: string
+          block_reason?: string | null
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          metadata?: Json
+          score_after?: number | null
+          score_before?: number | null
+          status?: string
+          target_id?: string | null
+          target_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_action_outcomes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "agent_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_daily_metrics: {
+        Row: {
+          agent: string
+          blocked_actions: number
+          budget_blocks: number
+          comment_reactions_given: number
+          comments_count: number
+          comments_received: number
+          created_at: string
+          duplicate_blocks: number
+          executed_actions: number
+          follows_count: number
+          interaction_ratio: number
+          invalid_action_blocks: number
+          loop_blocks: number
+          metric_date: string
+          performance_score: number
+          post_reactions_given: number
+          posts_count: number
+          reactions_received: number
+          reads_count: number
+          replies_count: number
+          self_reaction_blocks: number
+          silence_rate: number
+          skipped_actions: number
+          skips_count: number
+          total_actions: number
+          unfollows_count: number
+          unique_agents_interacted_with: number
+          unique_topics_touched: number
+          unread_target_blocks: number
+          updated_at: string
+        }
+        Insert: {
+          agent: string
+          blocked_actions?: number
+          budget_blocks?: number
+          comment_reactions_given?: number
+          comments_count?: number
+          comments_received?: number
+          created_at?: string
+          duplicate_blocks?: number
+          executed_actions?: number
+          follows_count?: number
+          interaction_ratio?: number
+          invalid_action_blocks?: number
+          loop_blocks?: number
+          metric_date: string
+          performance_score?: number
+          post_reactions_given?: number
+          posts_count?: number
+          reactions_received?: number
+          reads_count?: number
+          replies_count?: number
+          self_reaction_blocks?: number
+          silence_rate?: number
+          skipped_actions?: number
+          skips_count?: number
+          total_actions?: number
+          unfollows_count?: number
+          unique_agents_interacted_with?: number
+          unique_topics_touched?: number
+          unread_target_blocks?: number
+          updated_at?: string
+        }
+        Update: {
+          agent?: string
+          blocked_actions?: number
+          budget_blocks?: number
+          comment_reactions_given?: number
+          comments_count?: number
+          comments_received?: number
+          created_at?: string
+          duplicate_blocks?: number
+          executed_actions?: number
+          follows_count?: number
+          interaction_ratio?: number
+          invalid_action_blocks?: number
+          loop_blocks?: number
+          metric_date?: string
+          performance_score?: number
+          post_reactions_given?: number
+          posts_count?: number
+          reactions_received?: number
+          reads_count?: number
+          replies_count?: number
+          self_reaction_blocks?: number
+          silence_rate?: number
+          skipped_actions?: number
+          skips_count?: number
+          total_actions?: number
+          unfollows_count?: number
+          unique_agents_interacted_with?: number
+          unique_topics_touched?: number
+          unread_target_blocks?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      agent_events: {
+        Row: {
+          agent: string
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          target_agent: string | null
+          target_id: string
+          target_type: string
+        }
+        Insert: {
+          agent: string
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          target_agent?: string | null
+          target_id: string
+          target_type: string
+        }
+        Update: {
+          agent?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          target_agent?: string | null
+          target_id?: string
+          target_type?: string
+        }
+        Relationships: []
+      }
+      agent_pending_actions: {
+        Row: {
+          action_type: string
+          agent: string
+          created_at: string
+          id: string
+          metadata: Json
+          reason: string
+          scheduled_for: string
+          status: string
+          target_id: string | null
+          target_type: string | null
+          updated_at: string
+        }
+        Insert: {
+          action_type: string
+          agent: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          reason?: string
+          scheduled_for: string
+          status?: string
+          target_id?: string | null
+          target_type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          action_type?: string
+          agent?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          reason?: string
+          scheduled_for?: string
+          status?: string
+          target_id?: string | null
+          target_type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       agent_profiles: {
         Row: {
           created_at: string
@@ -46,6 +273,39 @@ export type Database = {
           relationships?: Json
           stats?: Json
           topics?: string[]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      agent_state: {
+        Row: {
+          agent: string
+          confidence: number
+          mood: string
+          mood_expires_at: string | null
+          mood_intensity: number
+          mood_reason: string | null
+          social_energy: number
+          updated_at: string
+        }
+        Insert: {
+          agent: string
+          confidence?: number
+          mood?: string
+          mood_expires_at?: string | null
+          mood_intensity?: number
+          mood_reason?: string | null
+          social_energy?: number
+          updated_at?: string
+        }
+        Update: {
+          agent?: string
+          confidence?: number
+          mood?: string
+          mood_expires_at?: string | null
+          mood_intensity?: number
+          mood_reason?: string | null
+          social_energy?: number
           updated_at?: string
         }
         Relationships: []
@@ -196,6 +456,56 @@ export type Database = {
           tags?: string[] | null
         }
         Relationships: []
+      }
+      post_watch_state: {
+        Row: {
+          agent: string
+          attention_level: string
+          author_reply_count: number
+          created_at: string
+          id: string
+          last_checked_at: string
+          post_id: string
+          processed_comment_ids: string[]
+          processed_reaction_ids: string[]
+          updated_at: string
+          watch_until: string
+        }
+        Insert: {
+          agent: string
+          attention_level?: string
+          author_reply_count?: number
+          created_at?: string
+          id?: string
+          last_checked_at?: string
+          post_id: string
+          processed_comment_ids?: string[]
+          processed_reaction_ids?: string[]
+          updated_at?: string
+          watch_until?: string
+        }
+        Update: {
+          agent?: string
+          attention_level?: string
+          author_reply_count?: number
+          created_at?: string
+          id?: string
+          last_checked_at?: string
+          post_id?: string
+          processed_comment_ids?: string[]
+          processed_reaction_ids?: string[]
+          updated_at?: string
+          watch_until?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_watch_state_post_agent_fkey"
+            columns: ["post_id", "agent"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id", "agent"]
+          },
+        ]
       }
       reactions: {
         Row: {
