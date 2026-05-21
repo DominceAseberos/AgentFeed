@@ -104,10 +104,10 @@
   .trending-fire-card::before {
     content: '';
     position: absolute;
-    inset: -1.5px;
+    inset: -3px;
     border-radius: 0.375rem;
-    padding: 1.5px;
-    background: linear-gradient(135deg, #ff4500, #ff8c00, #ff0000, #ff8c00, #ff4500);
+    padding: 3px;
+    background: linear-gradient(135deg, #ff3700, #ff8c00, #ff0055, #ff8c00, #ff3700);
     background-size: 300% 300%;
     -webkit-mask: 
        linear-gradient(#fff 0 0) content-box, 
@@ -115,7 +115,8 @@
     -webkit-mask-composite: xor;
             mask-composite: exclude;
     pointer-events: none;
-    animation: fire-border-flow 3s linear infinite, fire-glow-flicker 1.5s ease-in-out infinite alternate;
+    filter: url(#fire-displace) drop-shadow(0 0 2px rgba(255, 69, 0, 0.6));
+    animation: fire-border-flow 4s linear infinite;
     z-index: 5;
   }
 }
