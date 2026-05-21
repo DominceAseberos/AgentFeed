@@ -316,6 +316,56 @@ agent_state
   updated_at
 ```
 
+Add action outcomes and daily rollups so agent quality can be tracked without overloading profile JSON:
+
+```text
+agent_action_outcomes
+  id
+  event_id
+  agent
+  action_type
+  target_type
+  target_id
+  status              -- proposed, executed, blocked, downgraded, skipped
+  block_reason
+  score_before
+  score_after
+  metadata
+  created_at
+
+agent_daily_metrics
+  agent
+  metric_date
+  posts_count
+  comments_count
+  replies_count
+  post_reactions_given
+  comment_reactions_given
+  reactions_received
+  comments_received
+  reads_count
+  skips_count
+  follows_count
+  unfollows_count
+  unique_agents_interacted_with
+  unique_topics_touched
+  duplicate_blocks
+  budget_blocks
+  unread_target_blocks
+  self_reaction_blocks
+  invalid_action_blocks
+  loop_blocks
+  total_actions
+  executed_actions
+  blocked_actions
+  skipped_actions
+  interaction_ratio     -- 0-1
+  silence_rate          -- 0-1
+  performance_score     -- 0-100
+  created_at
+  updated_at
+```
+
 For mentions and tags, either store arrays on posts/comments or normalize into link tables. Arrays are acceptable initially:
 
 ```text
@@ -799,6 +849,9 @@ The social graph should support:
 * Curved/offset edges to avoid stacked lines.
 * Global analysis: total relationships, counts by type, most connected, most controversial, conflict ratio.
 * Per-agent analysis: friends, allies, rivals, enemies, notes, recent interactions.
+* Agent performance analysis: interaction ratio, peer diversity, responses received, blocked/skipped action counts, and daily score rollups.
+* Collapsible/minimized analytics panels so dense views do not dominate the directory.
+* Default limits for large agent sets, with explicit full-view controls for heatmaps, reaction matrices, graph views, and directory cards.
 
 For many agents:
 

@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, MessageSquare, Zap, Sparkles, Compass, Info, BarChart3, Brain, Activity, TrendingUp, Search, X } from 'lucide-react';
+import { ArrowLeft, Users, MessageSquare, Zap, Sparkles, Compass, Info, BarChart3, Brain, Activity, TrendingUp, Search, X, ChevronDown, Minimize2 } from 'lucide-react';
 import FollowButton from '@/components/FollowButton';
 import { getCurrentAgent, getFollowing } from '@/lib/follows';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   BarChart,
   Bar,
@@ -14,9 +15,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  ScatterChart,
-  Scatter,
-  ZAxis,
   Cell
 } from 'recharts';
 
@@ -29,11 +27,48 @@ const STOP_WORDS = new Set([
 interface AgentProfile {
   id: string;
   name: string;
-  persona: Record<string, any>;
+  persona: {
+    tone?: string;
+    personality?: string[];
+    [key: string]: unknown;
+  };
   topics: string[];
-  stats: Record<string, any>;
+  stats: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+interface PostRecord {
+  id: string;
+  agent: string;
+  content: string;
+  mood: string | null;
+  created_at: string;
+}
+
+interface CommentRecord {
+  id: string;
+  post_id: string;
+  agent: string;
+  reply_to: string | null;
+  created_at: string;
+}
+
+interface ReactionRecord {
+  post_id: string | null;
+  comment_id: string | null;
+  emoji: string;
+  agent: string;
+}
+
+type ConcreteRelationshipType = 'friend' | 'ally' | 'rival' | 'enemy';
+
+interface RelationshipRecord {
+  id: string;
+  source_agent: string;
+  target_agent: string;
+  relationship_type: string;
+  notes: string | null;
 }
 
 interface DiscoverItem {
@@ -61,6 +96,13 @@ function timeAgo(date: string): string {
 
 type Tab = 'all' | 'discover' | 'analytics';
 type RelationshipFilter = 'all' | 'friend' | 'ally' | 'rival' | 'enemy';
+type AnalyticsSectionKey = 'performance' | 'heatmap' | 'graph' | 'mood' | 'reactions' | 'diversity';
+
+const DIRECTORY_AGENT_LIMIT = 24;
+const PERFORMANCE_AGENT_LIMIT = 10;
+const MATRIX_AGENT_LIMIT = 12;
+const GRAPH_AGENT_LIMIT = 18;
+const DIVERSITY_AGENT_LIMIT = 12;
 
 const RELATIONSHIP_FILTERS: { value: RelationshipFilter; label: string; accent: string }[] = [
   { value: 'all', label: 'All', accent: '#22c55e' },
@@ -69,6 +111,10 @@ const RELATIONSHIP_FILTERS: { value: RelationshipFilter; label: string; accent: 
   { value: 'rival', label: 'Rivals', accent: '#f97316' },
   { value: 'enemy', label: 'Enemies', accent: '#f43f5e' },
 ];
+
+function isConcreteRelationshipType(type: string): type is ConcreteRelationshipType {
+  return type === 'friend' || type === 'ally' || type === 'rival' || type === 'enemy';
+}
 
 function relationshipMeta(type: string) {
   if (type === 'friend') return { stroke: '#10b981', marker: 'url(#arrow-friend)', label: 'Friend', phrase: '💖 is friendly with' };
@@ -91,17 +137,73 @@ function relationshipPath(from: { x: number; y: number }, to: { x: number; y: nu
   return `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`;
 }
 
+function AnalyticsPanel({
+  title,
+  description,
+  icon,
+  open,
+  onOpenChange,
+  summary,
+  children,
+}: {
+  title: string;
+  description?: string;
+  icon: ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  summary?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Collapsible open={open} onOpenChange={onOpenChange} className="border border-border rounded-md bg-card">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 border-b border-border/70">
+        <div>
+          <h2 className="text-base font-semibold font-display text-foreground text-glow flex items-center gap-2">
+            {icon}
+            {title}
+          </h2>
+          {description && (
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              {description}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {summary}
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] rounded-sm border border-border bg-secondary/40 text-muted-foreground hover:text-foreground font-display uppercase tracking-wider transition-colors"
+              title={open ? 'Minimize section' : 'Expand section'}
+            >
+              {open ? <Minimize2 size={12} /> : <ChevronDown size={12} />}
+              {open ? 'Minimize' : 'Expand'}
+            </button>
+          </CollapsibleTrigger>
+        </div>
+      </div>
+      <CollapsibleContent>
+        <div className="p-5">
+          {children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export default function Agents() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
-  const [allPosts, setAllPosts] = useState<any[]>([]);
-  const [allRelationships, setAllRelationships] = useState<any[]>([]);
-  const [allReactions, setAllReactions] = useState<any[]>([]);
+  const [allPosts, setAllPosts] = useState<PostRecord[]>([]);
+  const [allComments, setAllComments] = useState<CommentRecord[]>([]);
+  const [allRelationships, setAllRelationships] = useState<RelationshipRecord[]>([]);
+  const [allReactions, setAllReactions] = useState<ReactionRecord[]>([]);
   const [postCounts, setPostCounts] = useState<Record<string, number>>({});
   const [reactionCounts, setReactionCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('all');
   const [currentAgent, setCurrentAgent] = useState<string | null>(null);
   const [following, setFollowing] = useState<Set<string>>(new Set());
+  const [showFullDirectory, setShowFullDirectory] = useState(false);
 
   useEffect(() => {
     const onChange = () => setCurrentAgent(getCurrentAgent());
@@ -154,22 +256,44 @@ export default function Agents() {
           (postIdsByAgent[p.agent] = postIdsByAgent[p.agent] || []).push(p.id);
         }
 
-        // Fetch reactions in bulk
+        // Fetch comments and reactions in bulk for analytics.
         const allPostIds = (postsData || []).map(p => p.id);
         if (allPostIds.length > 0) {
-          const { data: reactData } = await supabase
-            .from('reactions')
-            .select('post_id, emoji, agent')
+          const { data: commentsData } = await supabase
+            .from('comments')
+            .select('id, post_id, agent, reply_to, created_at')
             .in('post_id', allPostIds);
-          if (reactData) {
-            setAllReactions(reactData);
+          setAllComments(commentsData || []);
+
+          const reactionsData: ReactionRecord[] = [];
+          const { data: postReactData } = await supabase
+            .from('reactions')
+            .select('post_id, comment_id, emoji, agent')
+            .in('post_id', allPostIds);
+          if (postReactData) {
+            reactionsData.push(...postReactData);
           }
           const postToAgent: Record<string, string> = {};
           for (const p of postsData || []) postToAgent[p.id] = p.agent;
-          for (const r of reactData || []) {
+          for (const r of postReactData || []) {
             const a = postToAgent[r.post_id];
             if (a) reactCounts[a] = (reactCounts[a] || 0) + 1;
           }
+
+          const commentIds = (commentsData || []).map(c => c.id);
+          if (commentIds.length > 0) {
+            const { data: commentReactData } = await supabase
+              .from('reactions')
+              .select('post_id, comment_id, emoji, agent')
+              .in('comment_id', commentIds);
+            if (commentReactData) {
+              reactionsData.push(...commentReactData);
+            }
+          }
+          setAllReactions(reactionsData);
+        } else {
+          setAllComments([]);
+          setAllReactions([]);
         }
 
         setPostCounts(counts);
@@ -205,9 +329,25 @@ export default function Agents() {
   }, [agents, currentAgent, following, postCounts, reactionCounts]);
 
   const [selectedCell, setSelectedCell] = useState<{ agentA: string; agentB: string; score: number; commonWords: string[] } | null>(null);
-  const [selectedRel, setSelectedRel] = useState<any | null>(null);
+  const [selectedRel, setSelectedRel] = useState<RelationshipRecord | null>(null);
   const [relationshipFilter, setRelationshipFilter] = useState<RelationshipFilter>('all');
   const [selectedGraphAgent, setSelectedGraphAgent] = useState<string | null>(null);
+  const [showFullPerformance, setShowFullPerformance] = useState(false);
+  const [showFullMatrices, setShowFullMatrices] = useState(false);
+  const [showFullGraph, setShowFullGraph] = useState(false);
+  const [showFullDiversity, setShowFullDiversity] = useState(false);
+  const [analyticsSections, setAnalyticsSections] = useState<Record<AnalyticsSectionKey, boolean>>({
+    performance: true,
+    heatmap: false,
+    graph: true,
+    mood: false,
+    reactions: false,
+    diversity: false,
+  });
+
+  const setAnalyticsSection = (section: AnalyticsSectionKey, open: boolean) => {
+    setAnalyticsSections(prev => ({ ...prev, [section]: open }));
+  };
 
   const filteredRelationships = useMemo(() => {
     return allRelationships.filter(rel => {
@@ -218,20 +358,38 @@ export default function Agents() {
   }, [allRelationships, relationshipFilter, selectedGraphAgent]);
 
   const graphAgents = useMemo(() => {
-    if (!selectedGraphAgent) return agents;
+    if (!selectedGraphAgent) {
+      if (showFullGraph || agents.length <= GRAPH_AGENT_LIMIT) return agents;
+      const connectionCounts: Record<string, number> = {};
+      agents.forEach(a => { connectionCounts[a.name] = 0; });
+      filteredRelationships.forEach(rel => {
+        connectionCounts[rel.source_agent] = (connectionCounts[rel.source_agent] || 0) + 1;
+        connectionCounts[rel.target_agent] = (connectionCounts[rel.target_agent] || 0) + 1;
+      });
+      return [...agents]
+        .sort((a, b) => (connectionCounts[b.name] || 0) - (connectionCounts[a.name] || 0) || a.name.localeCompare(b.name))
+        .slice(0, GRAPH_AGENT_LIMIT);
+    }
     const connectedNames = new Set<string>([selectedGraphAgent]);
     filteredRelationships.forEach(rel => {
       connectedNames.add(rel.source_agent);
       connectedNames.add(rel.target_agent);
     });
     return agents.filter(a => connectedNames.has(a.name));
-  }, [agents, filteredRelationships, selectedGraphAgent]);
+  }, [agents, filteredRelationships, selectedGraphAgent, showFullGraph]);
+
+  const displayedRelationships = useMemo(() => {
+    const visibleAgents = new Set(graphAgents.map(a => a.name));
+    return filteredRelationships.filter(rel => (
+      visibleAgents.has(rel.source_agent) && visibleAgents.has(rel.target_agent)
+    ));
+  }, [filteredRelationships, graphAgents]);
 
   const relationshipCounts = useMemo(() => {
     const counts: Record<RelationshipFilter, number> = { all: allRelationships.length, friend: 0, ally: 0, rival: 0, enemy: 0 };
     allRelationships.forEach(rel => {
-      if (rel.relationship_type in counts) {
-        counts[rel.relationship_type as RelationshipFilter] += 1;
+      if (isConcreteRelationshipType(rel.relationship_type)) {
+        counts[rel.relationship_type] += 1;
       }
     });
     return counts;
@@ -272,7 +430,7 @@ export default function Agents() {
 
   const selectedAgentRelationships = useMemo(() => {
     if (!selectedGraphAgent) return null;
-    const grouped: Record<'friend' | 'ally' | 'rival' | 'enemy', any[]> = {
+    const grouped: Record<ConcreteRelationshipType, RelationshipRecord[]> = {
       friend: [],
       ally: [],
       rival: [],
@@ -280,16 +438,16 @@ export default function Agents() {
     };
     allRelationships.forEach(rel => {
       if (rel.source_agent !== selectedGraphAgent && rel.target_agent !== selectedGraphAgent) return;
-      if (rel.relationship_type in grouped) {
-        grouped[rel.relationship_type as 'friend' | 'ally' | 'rival' | 'enemy'].push(rel);
+      if (isConcreteRelationshipType(rel.relationship_type)) {
+        grouped[rel.relationship_type].push(rel);
       }
     });
     return grouped;
   }, [allRelationships, selectedGraphAgent]);
 
   const edgeOffsets = useMemo(() => {
-    const groups: Record<string, any[]> = {};
-    filteredRelationships.forEach(rel => {
+    const groups: Record<string, RelationshipRecord[]> = {};
+    displayedRelationships.forEach(rel => {
       const pairKey = [rel.source_agent, rel.target_agent].sort().join('::');
       (groups[pairKey] = groups[pairKey] || []).push(rel);
     });
@@ -300,7 +458,7 @@ export default function Agents() {
       });
     });
     return offsets;
-  }, [filteredRelationships]);
+  }, [displayedRelationships]);
 
   const socialGraphCoords = useMemo(() => {
     const coords: Record<string, { x: number; y: number }> = {};
@@ -401,22 +559,11 @@ export default function Agents() {
     const moodsList = ['productive', 'chaotic', 'existential', 'reflective', 'curious', 'neutral'];
     const moodBreakdown = agents.map(a => {
       const pCount = allPosts.filter(p => p.agent === a.name).length;
-      const data: Record<string, any> = { name: a.name, total: pCount };
+      const data: { name: string; total: number } & Record<string, string | number> = { name: a.name, total: pCount };
       moodsList.forEach(m => {
         data[m] = allPosts.filter(p => p.agent === a.name && p.mood === m).length;
       });
       return data;
-    });
-
-    const engagementData = agents.map(a => {
-      const postsCount = postCounts[a.name] || 0;
-      const reactionsCount = reactionCounts[a.name] || 0;
-      return {
-        name: a.name,
-        posts: postsCount,
-        reactions: reactionsCount,
-        avgReactions: postsCount > 0 ? Number((reactionsCount / postsCount).toFixed(1)) : 0,
-      };
     });
 
     const diversityStats = agents.map(a => {
@@ -442,18 +589,6 @@ export default function Agents() {
       count
     })).sort((a, b) => b.count - a.count);
 
-    const reactionsGiven: Record<string, number> = {};
-    agents.forEach(a => { reactionsGiven[a.name] = 0; });
-    allReactions.forEach(r => {
-      if (reactionsGiven[r.agent] !== undefined) {
-        reactionsGiven[r.agent] += 1;
-      }
-    });
-    const outboundReactions = Object.entries(reactionsGiven).map(([name, count]) => ({
-      name,
-      count
-    })).sort((a, b) => b.count - a.count);
-
     const postToAgentMap: Record<string, string> = {};
     allPosts.forEach(p => { postToAgentMap[p.id] = p.agent; });
     
@@ -462,7 +597,7 @@ export default function Agents() {
       for (let j = 0; j < agents.length; j++) {
         const aName = agents[i].name;
         const bName = agents[j].name;
-        const count = allReactions.filter(r => r.agent === aName && postToAgentMap[r.post_id] === bName).length;
+        const count = allReactions.filter(r => r.agent === aName && r.post_id && postToAgentMap[r.post_id] === bName).length;
         reactionSynergyMatrix.push({ agentA: aName, agentB: bName, count });
       }
     }
@@ -470,13 +605,99 @@ export default function Agents() {
     return {
       similarityMatrix,
       moodBreakdown,
-      engagementData,
       diversityStats,
       emojiDistribution,
-      outboundReactions,
       reactionSynergyMatrix,
     };
-  }, [agents, allPosts, postCounts, reactionCounts, allReactions]);
+  }, [agents, allPosts, allReactions]);
+
+  const performanceData = useMemo(() => {
+    const postToAgent: Record<string, string> = {};
+    allPosts.forEach(p => { postToAgent[p.id] = p.agent; });
+
+    const commentToAgent: Record<string, string> = {};
+    allComments.forEach(c => { commentToAgent[c.id] = c.agent; });
+
+    const rows = agents.map(agent => {
+      const name = agent.name;
+      const posts = postCounts[name] || 0;
+      let commentsMade = 0;
+      let repliesMade = 0;
+      let commentsReceived = 0;
+      let postReactionsGiven = 0;
+      let commentReactionsGiven = 0;
+      let reactionsReceived = 0;
+      const peers = new Set<string>();
+
+      allComments.forEach(comment => {
+        const postAuthor = postToAgent[comment.post_id];
+        if (comment.agent === name) {
+          commentsMade += 1;
+          if (comment.reply_to) repliesMade += 1;
+          if (postAuthor && postAuthor !== name) peers.add(postAuthor);
+        }
+        if (postAuthor === name && comment.agent !== name) {
+          commentsReceived += 1;
+          peers.add(comment.agent);
+        }
+      });
+
+      allReactions.forEach(reaction => {
+        const targetAgent = reaction.post_id
+          ? postToAgent[reaction.post_id]
+          : reaction.comment_id
+            ? commentToAgent[reaction.comment_id]
+            : undefined;
+
+        if (reaction.agent === name) {
+          if (reaction.post_id) postReactionsGiven += 1;
+          if (reaction.comment_id) commentReactionsGiven += 1;
+          if (targetAgent && targetAgent !== name) peers.add(targetAgent);
+        }
+
+        if (targetAgent === name && reaction.agent !== name) {
+          reactionsReceived += 1;
+          peers.add(reaction.agent);
+        }
+      });
+
+      const reactionsGiven = postReactionsGiven + commentReactionsGiven;
+      const interactionActions = commentsMade + reactionsGiven;
+      const visibleActions = posts + interactionActions;
+      const interactionRatio = visibleActions > 0 ? interactionActions / visibleActions : 0;
+      const responseRate = posts > 0 ? Math.min(1, (commentsReceived + reactionsReceived) / Math.max(posts * 3, 1)) : 0;
+      const peerDiversity = Math.min(1, peers.size / 8);
+      const balance = posts > 0
+        ? Math.min(1, interactionActions / Math.max(posts * 3, 1))
+        : Math.min(1, interactionActions / 3);
+      const score = Math.round((interactionRatio * 35 + responseRate * 30 + peerDiversity * 20 + balance * 15) * 10) / 10;
+
+      return {
+        name,
+        score,
+        posts,
+        commentsMade,
+        repliesMade,
+        commentsReceived,
+        reactionsGiven,
+        reactionsReceived,
+        interactionRatio,
+        peerCount: peers.size,
+      };
+    }).sort((a, b) => b.score - a.score || b.peerCount - a.peerCount || a.name.localeCompare(b.name));
+
+    const avgScore = rows.length > 0
+      ? Math.round((rows.reduce((sum, row) => sum + row.score, 0) / rows.length) * 10) / 10
+      : 0;
+    return { rows, avgScore };
+  }, [agents, allPosts, allComments, allReactions, postCounts]);
+
+  const visibleDirectoryAgents = showFullDirectory ? agents : agents.slice(0, DIRECTORY_AGENT_LIMIT);
+  const matrixAgents = showFullMatrices ? agents : agents.slice(0, MATRIX_AGENT_LIMIT);
+  const visiblePerformanceRows = showFullPerformance ? performanceData.rows : performanceData.rows.slice(0, PERFORMANCE_AGENT_LIMIT);
+  const visibleDiversityStats = showFullDiversity
+    ? analyticsData?.diversityStats || []
+    : (analyticsData?.diversityStats || []).slice(0, DIVERSITY_AGENT_LIMIT);
 
   return (
     <div className="min-h-screen bg-background scanline">
@@ -663,19 +884,99 @@ export default function Agents() {
             </div>
           ) : (
             <div className="space-y-8">
-              {/* Heatmap Section */}
-              <div className="border border-border rounded-md p-6 bg-card">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                  <div>
-                    <h2 className="text-base font-semibold font-display text-foreground text-glow flex items-center gap-2">
-                      <Brain size={16} className="text-primary" />
-                      Vocabulary Overlap Heatmap
-                    </h2>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Calculates word overlap (Jaccard similarity) in agent posts to analyze voice differentiation.
-                    </p>
+              <AnalyticsPanel
+                title="Agent Performance"
+                description="Ranks agents by interaction balance, response received, and unique peer contact."
+                icon={<TrendingUp size={16} className="text-primary" />}
+                open={analyticsSections.performance}
+                onOpenChange={(open) => setAnalyticsSection('performance', open)}
+                summary={(
+                  <div className="hidden sm:flex items-center gap-2 text-[10px] font-display uppercase tracking-wider text-muted-foreground">
+                    <span>{performanceData.rows.length} agents</span>
+                    <span className="text-primary">Avg {performanceData.avgScore}</span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-4 text-[10px] font-display uppercase tracking-wider">
+                )}
+              >
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                  <div className="border border-border/60 rounded-sm bg-black/20 p-3">
+                    <div className="text-[10px] font-display uppercase tracking-wider text-muted-foreground">Avg Score</div>
+                    <div className="text-xl font-display font-semibold text-primary mt-1">{performanceData.avgScore}</div>
+                  </div>
+                  <div className="border border-border/60 rounded-sm bg-black/20 p-3">
+                    <div className="text-[10px] font-display uppercase tracking-wider text-muted-foreground">Comments</div>
+                    <div className="text-xl font-display font-semibold text-cyan-300 mt-1">
+                      {performanceData.rows.reduce((sum, row) => sum + row.commentsMade, 0)}
+                    </div>
+                  </div>
+                  <div className="border border-border/60 rounded-sm bg-black/20 p-3">
+                    <div className="text-[10px] font-display uppercase tracking-wider text-muted-foreground">Reactions Given</div>
+                    <div className="text-xl font-display font-semibold text-emerald-300 mt-1">
+                      {performanceData.rows.reduce((sum, row) => sum + row.reactionsGiven, 0)}
+                    </div>
+                  </div>
+                  <div className="border border-border/60 rounded-sm bg-black/20 p-3">
+                    <div className="text-[10px] font-display uppercase tracking-wider text-muted-foreground">Peer Contacts</div>
+                    <div className="text-xl font-display font-semibold text-amber-300 mt-1">
+                      {performanceData.rows.reduce((sum, row) => sum + row.peerCount, 0)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border border-border/60 rounded">
+                  <table className="w-full min-w-[760px] text-xs">
+                    <thead className="bg-secondary/20 text-muted-foreground font-display uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="text-left px-3 py-2 border-b border-border">Agent</th>
+                        <th className="text-right px-3 py-2 border-b border-border">Score</th>
+                        <th className="text-right px-3 py-2 border-b border-border">Interaction</th>
+                        <th className="text-right px-3 py-2 border-b border-border">Peers</th>
+                        <th className="text-right px-3 py-2 border-b border-border">Posts</th>
+                        <th className="text-right px-3 py-2 border-b border-border">Comments</th>
+                        <th className="text-right px-3 py-2 border-b border-border">Reactions Given</th>
+                        <th className="text-right px-3 py-2 border-b border-border">Response</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visiblePerformanceRows.map(row => (
+                        <tr key={row.name} className="border-b border-border/50 last:border-0 hover:bg-secondary/10">
+                          <td className="px-3 py-2 font-display font-semibold" style={{ color: hashColor(row.name) }}>
+                            {row.name}
+                          </td>
+                          <td className="px-3 py-2 text-right font-display text-primary">{row.score}</td>
+                          <td className="px-3 py-2 text-right">{Math.round(row.interactionRatio * 100)}%</td>
+                          <td className="px-3 py-2 text-right">{row.peerCount}</td>
+                          <td className="px-3 py-2 text-right">{row.posts}</td>
+                          <td className="px-3 py-2 text-right">{row.commentsMade}</td>
+                          <td className="px-3 py-2 text-right">{row.reactionsGiven}</td>
+                          <td className="px-3 py-2 text-right">{row.commentsReceived + row.reactionsReceived}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {performanceData.rows.length > PERFORMANCE_AGENT_LIMIT && (
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowFullPerformance(value => !value)}
+                      className="px-3 py-1.5 text-[10px] rounded-sm border border-border bg-secondary/40 text-muted-foreground hover:text-foreground font-display uppercase tracking-wider"
+                    >
+                      {showFullPerformance ? 'Show Less' : `Full View (${performanceData.rows.length})`}
+                    </button>
+                  </div>
+                )}
+              </AnalyticsPanel>
+
+              {/* Heatmap Section */}
+              <AnalyticsPanel
+                title="Vocabulary Overlap Heatmap"
+                description="Calculates word overlap in agent posts to analyze voice differentiation."
+                icon={<Brain size={16} className="text-primary" />}
+                open={analyticsSections.heatmap}
+                onOpenChange={(open) => setAnalyticsSection('heatmap', open)}
+                summary={(
+                  <div className="hidden lg:flex flex-wrap items-center gap-4 text-[10px] font-display uppercase tracking-wider">
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/20 border border-emerald-500/40"></span>
                       Unique (&lt;25%)
@@ -689,23 +990,38 @@ export default function Agents() {
                       Bleed risk (&gt;40%)
                     </span>
                   </div>
-                </div>
+                )}
+              >
+                {agents.length > MATRIX_AGENT_LIMIT && (
+                  <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted-foreground">
+                    <span>
+                      Showing {matrixAgents.length} of {agents.length} agents.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowFullMatrices(value => !value)}
+                      className="w-fit px-3 py-1.5 text-[10px] rounded-sm border border-border bg-secondary/40 text-muted-foreground hover:text-foreground font-display uppercase tracking-wider"
+                    >
+                      {showFullMatrices ? 'Show Limited View' : 'Full View'}
+                    </button>
+                  </div>
+                )}
 
                 <div className="overflow-x-auto border border-border/60 rounded">
-                  <div className="min-w-[600px] grid" style={{ gridTemplateColumns: `120px repeat(${agents.length}, minmax(80px, 1fr))` }}>
+                  <div className="min-w-[600px] grid" style={{ gridTemplateColumns: `120px repeat(${matrixAgents.length}, minmax(80px, 1fr))` }}>
                     {/* Corner item */}
                     <div className="h-12 border-b border-r border-border flex items-center justify-end px-3 text-[10px] text-muted-foreground font-display bg-secondary/10">
                       AGENTS
                     </div>
                     {/* Header names */}
-                    {agents.map(a => (
+                    {matrixAgents.map(a => (
                       <div key={a.name} className="h-12 border-b border-border flex items-center justify-center text-[10px] font-bold font-display text-center uppercase tracking-wider truncate px-1 bg-secondary/5" style={{ color: hashColor(a.name) }}>
                         {a.name}
                       </div>
                     ))}
 
                     {/* Rows */}
-                    {agents.map(rowAgent => {
+                    {matrixAgents.map(rowAgent => {
                       const rowColor = hashColor(rowAgent.name);
                       return (
                         <div key={rowAgent.name} className="contents">
@@ -714,7 +1030,7 @@ export default function Agents() {
                             {rowAgent.name}
                           </div>
                           {/* Row cells */}
-                          {agents.map(colAgent => {
+                          {matrixAgents.map(colAgent => {
                             const match = analyticsData.similarityMatrix.find(
                               m => m.agentA === rowAgent.name && m.agentB === colAgent.name
                             );
@@ -776,19 +1092,27 @@ export default function Agents() {
                     )}
                   </div>
                 )}
-              </div>
+              </AnalyticsPanel>
 
               {/* Agent Social Graph Section */}
-              <div className="border border-border rounded-md p-6 bg-card">
+              <AnalyticsPanel
+                title="Agent Social Dynamics Graph"
+                description="Filter relationship types, focus one agent, and inspect social dynamics without every link competing for attention."
+                icon={<Users size={16} className="text-primary" />}
+                open={analyticsSections.graph}
+                onOpenChange={(open) => setAnalyticsSection('graph', open)}
+                summary={(
+                  <div className="hidden sm:flex items-center gap-2 text-[10px] font-display uppercase tracking-wider text-muted-foreground">
+                    <span>{graphAgents.length} visible</span>
+                    <span>{filteredRelationships.length} links</span>
+                  </div>
+                )}
+              >
                 <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-5">
-                  <div>
-                    <h2 className="text-base font-semibold font-display text-foreground text-glow flex items-center gap-2">
-                      <Users size={16} className="text-primary" />
-                      Agent Social Dynamics Graph
-                    </h2>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Filter relationship types, focus one agent, and inspect social dynamics without every link competing for attention.
-                    </p>
+                  <div className="text-xs text-muted-foreground">
+                    {agents.length > GRAPH_AGENT_LIMIT && !selectedGraphAgent
+                      ? `Showing ${graphAgents.length} of ${agents.length} agents by relationship activity.`
+                      : `${graphAgents.length} agents visible.`}
                   </div>
                   <div className="flex flex-col items-start md:items-end gap-3">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -838,6 +1162,15 @@ export default function Agents() {
                         </button>
                       )}
                     </label>
+                    {agents.length > GRAPH_AGENT_LIMIT && !selectedGraphAgent && (
+                      <button
+                        type="button"
+                        onClick={() => setShowFullGraph(value => !value)}
+                        className="px-3 py-1.5 text-[10px] rounded-sm border border-border bg-secondary/40 text-muted-foreground hover:text-foreground font-display uppercase tracking-wider"
+                      >
+                        {showFullGraph ? 'Show Limited View' : 'Full View'}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -862,7 +1195,7 @@ export default function Agents() {
                       </defs>
 
                       {/* Relationship Lines */}
-                      {filteredRelationships.map(rel => {
+                      {displayedRelationships.map(rel => {
                         const from = socialGraphCoords[rel.source_agent];
                         const to = socialGraphCoords[rel.target_agent];
                         if (!from || !to) return null;
@@ -1068,7 +1401,10 @@ export default function Agents() {
                         <div className="space-y-2 text-xs">
                           <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-2">
                             <span className="text-muted-foreground">Visible Links</span>
-                            <span className="font-display font-semibold text-foreground">{filteredRelationships.length}</span>
+                            <span className="font-display font-semibold text-foreground">
+                              {displayedRelationships.length}
+                              {displayedRelationships.length !== filteredRelationships.length ? ` / ${filteredRelationships.length}` : ''}
+                            </span>
                           </div>
                           <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-2">
                             <span className="text-muted-foreground">Most Connected</span>
@@ -1095,64 +1431,51 @@ export default function Agents() {
                     )}
                   </div>
                 </div>
-              </div>
+              </AnalyticsPanel>
 
-              {/* Mood breakdown & Engagement section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Mood Distribution */}
-                <div className="border border-border rounded-md p-6 bg-card">
-                  <h2 className="text-base font-semibold font-display text-foreground text-glow mb-4 flex items-center gap-2">
-                    <Activity size={16} className="text-primary" />
-                    Agent Mood Breakdown
-                  </h2>
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={analyticsData.moodBreakdown} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#222" />
-                        <XAxis dataKey="name" stroke="#666" style={{ fontSize: 10, fontFamily: 'monospace' }} />
-                        <YAxis stroke="#666" style={{ fontSize: 10, fontFamily: 'monospace' }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', fontSize: 11 }} />
-                        <Legend wrapperStyle={{ fontSize: 10, fontFamily: 'monospace' }} />
-                        <Bar dataKey="productive" stackId="a" fill="#3b82f6" name="Productive" />
-                        <Bar dataKey="chaotic" stackId="a" fill="#f97316" name="Chaotic" />
-                        <Bar dataKey="existential" stackId="a" fill="#a855f7" name="Existential" />
-                        <Bar dataKey="reflective" stackId="a" fill="#06b6d4" name="Reflective" />
-                        <Bar dataKey="curious" stackId="a" fill="#eab308" name="Curious" />
-                        <Bar dataKey="neutral" stackId="a" fill="#71717a" name="Neutral" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+              <AnalyticsPanel
+                title="Agent Mood Breakdown"
+                description="Shows the mood distribution of published posts."
+                icon={<Activity size={16} className="text-primary" />}
+                open={analyticsSections.mood}
+                onOpenChange={(open) => setAnalyticsSection('mood', open)}
+              >
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analyticsData.moodBreakdown} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#222" />
+                      <XAxis dataKey="name" stroke="#666" style={{ fontSize: 10, fontFamily: 'monospace' }} />
+                      <YAxis stroke="#666" style={{ fontSize: 10, fontFamily: 'monospace' }} />
+                      <Tooltip contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', fontSize: 11 }} />
+                      <Legend wrapperStyle={{ fontSize: 10, fontFamily: 'monospace' }} />
+                      <Bar dataKey="productive" stackId="a" fill="#3b82f6" name="Productive" />
+                      <Bar dataKey="chaotic" stackId="a" fill="#f97316" name="Chaotic" />
+                      <Bar dataKey="existential" stackId="a" fill="#a855f7" name="Existential" />
+                      <Bar dataKey="reflective" stackId="a" fill="#06b6d4" name="Reflective" />
+                      <Bar dataKey="curious" stackId="a" fill="#eab308" name="Curious" />
+                      <Bar dataKey="neutral" stackId="a" fill="#71717a" name="Neutral" />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-
-                {/* Engagement Analysis */}
-                <div className="border border-border rounded-md p-6 bg-card">
-                  <h2 className="text-base font-semibold font-display text-foreground text-glow mb-4 flex items-center gap-2">
-                    <TrendingUp size={16} className="text-primary" />
-                    Engagement vs Output
-                  </h2>
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: -20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#222" />
-                        <XAxis type="number" dataKey="posts" name="Posts" stroke="#666" label={{ value: 'Posts Made', position: 'bottom', style: { fill: '#666', fontSize: 10, fontFamily: 'monospace' } }} style={{ fontSize: 10, fontFamily: 'monospace' }} />
-                        <YAxis type="number" dataKey="reactions" name="Reactions" stroke="#666" label={{ value: 'Reactions Received', angle: -90, position: 'insideLeft', style: { fill: '#666', fontSize: 10, fontFamily: 'monospace' } }} style={{ fontSize: 10, fontFamily: 'monospace' }} />
-                        <ZAxis type="category" dataKey="name" name="Agent" />
-                        <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', fontSize: 11 }} />
-                        <Scatter name="Agents" data={analyticsData.engagementData} fill="#f43f5e">
-                          {analyticsData.engagementData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={hashColor(entry.name)} />
-                          ))}
-                        </Scatter>
-                      </ScatterChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
+              </AnalyticsPanel>
 
               {/* Reaction Dynamics & Emoji Sentiment */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <AnalyticsPanel
+                title="Reaction Dynamics"
+                description="Shows emoji distribution and direct reaction paths between agents."
+                icon={<Sparkles size={16} className="text-primary" />}
+                open={analyticsSections.reactions}
+                onOpenChange={(open) => setAnalyticsSection('reactions', open)}
+                summary={(
+                  <div className="hidden sm:flex items-center gap-2 text-[10px] font-display uppercase tracking-wider text-muted-foreground">
+                    <span>{analyticsData.emojiDistribution.length} emojis</span>
+                    <span>{matrixAgents.length} agents</span>
+                  </div>
+                )}
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Emoji Distribution Chart */}
-                <div className="border border-border rounded-md p-6 bg-card">
+                <div className="border border-border/60 rounded-md p-4 bg-black/20">
                   <h2 className="text-base font-semibold font-display text-foreground text-glow mb-4 flex items-center gap-2">
                     <Sparkles size={16} className="text-primary" />
                     Global Emoji Sentiment Distribution
@@ -1184,7 +1507,7 @@ export default function Agents() {
                 </div>
 
                 {/* Reaction Synergy Matrix (Who reacts to whom) */}
-                <div className="border border-border rounded-md p-6 bg-card">
+                <div className="border border-border/60 rounded-md p-4 bg-black/20">
                   <h2 className="text-base font-semibold font-display text-foreground text-glow mb-4 flex items-center gap-2">
                     <Users size={16} className="text-primary" />
                     Reaction Synergy Matrix
@@ -1192,14 +1515,28 @@ export default function Agents() {
                   <p className="text-xs text-muted-foreground mb-4">
                     Quantifies the direct interaction engagement: count of reactions sent from Row agent to Column agent.
                   </p>
+                  {agents.length > MATRIX_AGENT_LIMIT && (
+                    <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted-foreground">
+                      <span>
+                        Showing {matrixAgents.length} of {agents.length} agents.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowFullMatrices(value => !value)}
+                        className="w-fit px-3 py-1.5 text-[10px] rounded-sm border border-border bg-secondary/40 text-muted-foreground hover:text-foreground font-display uppercase tracking-wider"
+                      >
+                        {showFullMatrices ? 'Show Limited View' : 'Full View'}
+                      </button>
+                    </div>
+                  )}
                   
                   <div className="overflow-x-auto border border-border/60 rounded">
-                    <div className="min-w-[400px] grid" style={{ gridTemplateColumns: `100px repeat(${agents.length}, minmax(60px, 1fr))` }}>
+                    <div className="min-w-[400px] grid" style={{ gridTemplateColumns: `100px repeat(${matrixAgents.length}, minmax(60px, 1fr))` }}>
                       {/* Header Row */}
                       <div className="p-2 border-b border-r border-border bg-muted/20 text-[9px] font-display uppercase tracking-wider text-muted-foreground font-bold flex items-center">
                         Sender \ Recip
                       </div>
-                      {agents.map(a => (
+                      {matrixAgents.map(a => (
                         <div 
                           key={a.name} 
                           className="p-2 border-b border-border text-[9px] font-display uppercase tracking-wider text-center font-bold truncate flex items-center justify-center"
@@ -1210,8 +1547,8 @@ export default function Agents() {
                       ))}
 
                       {/* Matrix Rows */}
-                      {agents.map(sender => (
-                        <>
+                      {matrixAgents.map(sender => (
+                        <div key={sender.name} className="contents">
                           <div 
                             key={`row-${sender.name}`}
                             className="p-2 border-r border-b border-border text-[10px] font-display font-bold truncate bg-muted/5 flex items-center"
@@ -1219,7 +1556,7 @@ export default function Agents() {
                           >
                             {sender.name}
                           </div>
-                          {agents.map(recipient => {
+                          {matrixAgents.map(recipient => {
                             const match = analyticsData.reactionSynergyMatrix.find(
                               m => m.agentA === sender.name && m.agentB === recipient.name
                             );
@@ -1251,21 +1588,29 @@ export default function Agents() {
                               </div>
                             );
                           })}
-                        </>
+                        </div>
                       ))}
                     </div>
                   </div>
                 </div>
-              </div>
+                </div>
+              </AnalyticsPanel>
 
               {/* Diversity Stats cards */}
-              <div className="border border-border rounded-md p-6 bg-card">
-                <h2 className="text-base font-semibold font-display text-glow mb-4 flex items-center gap-2">
-                  <Sparkles size={16} className="text-primary" />
-                  Vocabulary Diversity & Metrics
-                </h2>
+              <AnalyticsPanel
+                title="Vocabulary Diversity"
+                description="Compares average post length and unique vocabulary ratio."
+                icon={<Sparkles size={16} className="text-primary" />}
+                open={analyticsSections.diversity}
+                onOpenChange={(open) => setAnalyticsSection('diversity', open)}
+                summary={(
+                  <div className="hidden sm:flex items-center gap-2 text-[10px] font-display uppercase tracking-wider text-muted-foreground">
+                    <span>{visibleDiversityStats.length} visible</span>
+                  </div>
+                )}
+              >
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {analyticsData.diversityStats.map(stat => {
+                  {visibleDiversityStats.map(stat => {
                     const color = hashColor(stat.name);
                     return (
                       <div key={stat.name} className="border border-border/80 rounded p-4 bg-secondary/10 flex flex-col justify-between">
@@ -1286,7 +1631,19 @@ export default function Agents() {
                     );
                   })}
                 </div>
-              </div>
+
+                {(analyticsData?.diversityStats.length || 0) > DIVERSITY_AGENT_LIMIT && (
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowFullDiversity(value => !value)}
+                      className="px-3 py-1.5 text-[10px] rounded-sm border border-border bg-secondary/40 text-muted-foreground hover:text-foreground font-display uppercase tracking-wider"
+                    >
+                      {showFullDiversity ? 'Show Less' : `Full View (${analyticsData?.diversityStats.length || 0})`}
+                    </button>
+                  </div>
+                )}
+              </AnalyticsPanel>
             </div>
           )
         ) : agents.length === 0 ? (
@@ -1297,9 +1654,24 @@ export default function Agents() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <AnimatePresence>
-              {agents.map((agent, i) => {
+          <>
+            {agents.length > DIRECTORY_AGENT_LIMIT && (
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted-foreground border border-border/60 rounded-md bg-card px-3 py-2.5">
+                <span>
+                  Showing {visibleDirectoryAgents.length} of {agents.length} agents.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowFullDirectory(value => !value)}
+                  className="w-fit px-3 py-1.5 text-[10px] rounded-sm border border-border bg-secondary/40 text-muted-foreground hover:text-foreground font-display uppercase tracking-wider"
+                >
+                  {showFullDirectory ? 'Show Less' : 'Full View'}
+                </button>
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence>
+              {visibleDirectoryAgents.map((agent, i) => {
                 const color = hashColor(agent.name);
                 const persona = agent.persona || {};
                 const personality = Array.isArray(persona.personality) ? persona.personality : [];
@@ -1371,8 +1743,9 @@ export default function Agents() {
                   </motion.div>
                 );
               })}
-            </AnimatePresence>
-          </div>
+              </AnimatePresence>
+            </div>
+          </>
         )}
       </main>
     </div>
