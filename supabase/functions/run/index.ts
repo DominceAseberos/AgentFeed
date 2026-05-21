@@ -79,6 +79,37 @@ function isContentRepetitive(newContent: string, history: string[]): { repetitiv
   return { repetitive: false };
 }
 
+async function getEmbedding(text: string): Promise<number[] | null> {
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiKey) return null;
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${geminiKey}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "models/text-embedding-004",
+        content: {
+          parts: [{ text }]
+        }
+      })
+    });
+
+    if (!res.ok) {
+      console.warn(`Embedding API failed: ${res.status}`);
+      return null;
+    }
+
+    const data = await res.json();
+    return data.embedding?.values || null;
+  } catch (err) {
+    console.warn("Failed to fetch embedding:", err);
+    return null;
+  }
+}
+
 interface ActionResult {
   type: string;
   success: boolean;
@@ -698,6 +729,24 @@ ${taskLines}`;
             continue;
           }
 
+          // Fetch embedding for semantic duplicate check and saving
+          const embedding = await getEmbedding(replyContent);
+          if (embedding) {
+            const { data: semanticMatches } = await supabase.rpc("match_comments", {
+              query_embedding: embedding,
+              match_threshold: 0.95,
+              match_count: 1
+            });
+            if (semanticMatches && semanticMatches.length > 0) {
+              results.push({
+                type: action.type,
+                success: false,
+                detail: `Duplicate comment blocked: Semantic cosine similarity is too high with existing comment.`
+              });
+              continue;
+            }
+          }
+
           // Check and handle loop break
           const loopCheck = await handleLoopBreak(supabase, action.post_id, agentName);
           let insertAgent = agentName;
@@ -718,6 +767,7 @@ ${taskLines}`;
               agent: insertAgent,
               content: insertContent,
               source: loopCheck.isLoop ? "system-override" : randomSource,
+              embedding: embedding,
             })
             .select("id")
             .single();
@@ -743,6 +793,24 @@ ${taskLines}`;
             continue;
           }
 
+          // Fetch embedding for semantic duplicate check and saving
+          const embedding = await getEmbedding(postContent);
+          if (embedding) {
+            const { data: semanticMatches } = await supabase.rpc("match_posts", {
+              query_embedding: embedding,
+              match_threshold: 0.95,
+              match_count: 1
+            });
+            if (semanticMatches && semanticMatches.length > 0) {
+              results.push({
+                type: "post",
+                success: false,
+                detail: `Duplicate post blocked: Semantic cosine similarity is too high with existing post.`
+              });
+              continue;
+            }
+          }
+
           const mood = detectMood(postContent);
           const tags = detectTags(postContent);
 
@@ -754,6 +822,7 @@ ${taskLines}`;
               source: randomSource,
               mood,
               tags,
+              embedding: embedding,
             })
             .select("id")
             .single();
@@ -776,6 +845,24 @@ ${taskLines}`;
             continue;
           }
 
+          // Fetch embedding for semantic duplicate check and saving
+          const embedding = await getEmbedding(commentContent);
+          if (embedding) {
+            const { data: semanticMatches } = await supabase.rpc("match_comments", {
+              query_embedding: embedding,
+              match_threshold: 0.95,
+              match_count: 1
+            });
+            if (semanticMatches && semanticMatches.length > 0) {
+              results.push({
+                type: "comment",
+                success: false,
+                detail: `Duplicate comment blocked: Semantic cosine similarity is too high with existing comment.`
+              });
+              continue;
+            }
+          }
+
           // Check and handle loop break
           const loopCheck = await handleLoopBreak(supabase, action.post_id, agentName);
           let insertAgent = agentName;
@@ -793,6 +880,7 @@ ${taskLines}`;
               agent: insertAgent,
               content: insertContent,
               source: loopCheck.isLoop ? "system-override" : randomSource,
+              embedding: embedding,
             })
             .select("id")
             .single();
