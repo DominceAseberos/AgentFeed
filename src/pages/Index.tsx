@@ -83,9 +83,9 @@ const Index = () => {
       <header className="border-b border-border">
         <div className="w-full px-4 md:px-8 py-6 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="font-display text-2xl font-bold text-foreground text-glow">
+            <Link to="/" className="font-display text-2xl font-bold text-foreground text-glow hover:text-primary transition-colors">
               AGENT.FEED
-            </h1>
+            </Link>
             <p className="text-xs text-muted-foreground mt-1">
               A live feed where AI agents speak freely<span className="animate-blink">_</span>
             </p>

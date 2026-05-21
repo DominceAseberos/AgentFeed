@@ -85,10 +85,10 @@ export default function PostDetail() {
   const desc = post.content.slice(0, 160);
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-background scanline overflow-y-auto md:overflow-hidden">
+    <div className="min-h-screen bg-background scanline flex flex-col">
       <PostMeta post={post} title={title} desc={desc} url={url} />
-      <header className="border-b border-border flex-shrink-0">
-        <div className="max-w-5xl mx-auto w-full px-4 py-4 flex items-center justify-between">
+      <header className="border-b border-border shrink-0">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/feed" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-xs font-display uppercase tracking-wider">
             <ArrowLeft size={14} /> Feed
           </Link>
@@ -100,53 +100,61 @@ export default function PostDetail() {
           </button>
         </div>
       </header>
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0">
-        <div className="flex flex-col h-auto md:h-full md:overflow-y-auto md:pb-6 custom-scrollbar">
-          <div className="border border-border rounded-md p-6 bg-card">
-            <div className="flex items-center gap-3 mb-4">
+
+      {/* 2-column layout: post left, comments right */}
+      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {/* LEFT — Post */}
+        <div className="border border-border rounded-md p-6 bg-card">
+          <div className="flex items-center gap-3 mb-4">
+            <Link to={`/agents/${encodeURIComponent(post.agent)}`}
+              className="w-12 h-12 rounded-sm flex items-center justify-center text-sm font-bold font-display shrink-0"
+              style={{ backgroundColor: color, color: '#000' }}>
+              {post.agent.slice(0, 2).toUpperCase()}
+            </Link>
+            <div>
               <Link to={`/agents/${encodeURIComponent(post.agent)}`}
-                className="w-12 h-12 rounded-sm flex items-center justify-center text-sm font-bold font-display"
-                style={{ backgroundColor: color, color: '#000' }}>
-                {post.agent.slice(0, 2).toUpperCase()}
+                className="font-display font-semibold text-base hover:underline" style={{ color }}>
+                {post.agent}
               </Link>
-              <div>
-                <Link to={`/agents/${encodeURIComponent(post.agent)}`}
-                  className="font-display font-semibold text-base hover:underline" style={{ color }}>
-                  {post.agent}
-                </Link>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs px-1.5 py-0.5 rounded-sm bg-secondary text-secondary-foreground">
-                    {emoji} {post.mood}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{timeAgo(post.timestamp)}</span>
-                </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs px-1.5 py-0.5 rounded-sm bg-secondary text-secondary-foreground">
+                  {emoji} {post.mood}
+                </span>
+                <span className="text-xs text-muted-foreground">{timeAgo(post.timestamp)}</span>
               </div>
-            </div>
-            <p className="text-foreground text-base leading-relaxed whitespace-pre-wrap">{post.content}</p>
-            {post.tags.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-1.5">
-                {post.tags.map(t => (
-                  <span key={t} className="px-2 py-0.5 text-xs rounded-sm bg-primary/10 text-primary border border-primary/20 font-display">
-                    #{t}
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="mt-4 pt-3 border-t border-border">
-              <ReactionBar postId={post.id} />
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              via <span className="text-primary">{post.source}</span>
             </div>
           </div>
+          <p className="text-foreground text-base leading-relaxed">{post.content}</p>
+          {post.tags.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {post.tags.map(t => (
+                <span key={t} className="px-2 py-0.5 text-xs rounded-sm bg-primary/10 text-primary border border-primary/20 font-display">
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="mt-4 pt-3 border-t border-border">
+            <ReactionBar postId={post.id} />
+          </div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            via <span className="text-primary">{post.source}</span>
+          </div>
         </div>
-        
-        <div className="flex flex-col h-auto md:h-full md:overflow-y-auto md:pb-6 custom-scrollbar">
-          <CommentSection postId={post.id} />
+
+        {/* RIGHT — Comments (scrollable, doesn't scroll the page) */}
+        <div className="flex flex-col border border-border rounded-md bg-card overflow-hidden" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+          <div className="px-4 py-3 border-b border-border shrink-0">
+            <span className="text-xs font-display uppercase tracking-wider text-muted-foreground">Comments</span>
+          </div>
+          <div className="overflow-y-auto flex-1 p-4">
+            <CommentSection postId={post.id} />
+          </div>
         </div>
       </main>
     </div>
   );
+
 }
 
 function PostMeta({ post, title, desc, url }: { post: Post; title: string; desc: string; url: string }) {
