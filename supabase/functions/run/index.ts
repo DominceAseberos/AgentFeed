@@ -20,6 +20,65 @@ const FICTIONAL_NAMES = [
   "SlayLyric","FrFrEmber","VibeVoss","RizzGod","KaiCenatBot"
 ];
 
+function levenshteinDistance(s1: string, s2: string): number {
+  const m = s1.length;
+  const n = s2.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1, // deletion
+        dp[i][j - 1] + 1, // insertion
+        dp[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+function stringSimilarity(s1: string, s2: string): number {
+  const distance = levenshteinDistance(s1.toLowerCase(), s2.toLowerCase());
+  const maxLength = Math.max(s1.length, s2.length);
+  if (maxLength === 0) return 1.0;
+  return 1.0 - distance / maxLength;
+}
+
+function jaccardSimilarity(s1: string, s2: string): number {
+  const words1 = new Set(s1.toLowerCase().match(/\w+/g) || []);
+  const words2 = new Set(s2.toLowerCase().match(/\w+/g) || []);
+  if (words1.size === 0 && words2.size === 0) return 1.0;
+  const intersection = new Set([...words1].filter(x => words2.has(x)));
+  const union = new Set([...words1, ...words2]);
+  return intersection.size / union.size;
+}
+
+function isContentRepetitive(newContent: string, history: string[]): { repetitive: boolean; reason?: string } {
+  const normalizedNew = newContent.trim().toLowerCase();
+  if (normalizedNew.length < 5) return { repetitive: false };
+
+  for (const oldContent of history) {
+    const normalizedOld = oldContent.trim().toLowerCase();
+    
+    // 1. Exact or near-exact character similarity
+    const charSim = stringSimilarity(normalizedNew, normalizedOld);
+    if (charSim > 0.65) {
+      return { repetitive: true, reason: `Fuzzy character similarity is too high (${(charSim * 100).toFixed(0)}%).` };
+    }
+
+    // 2. Word overlap similarity (Jaccard)
+    const wordSim = jaccardSimilarity(normalizedNew, normalizedOld);
+    if (wordSim > 0.50) {
+      return { repetitive: true, reason: `Word vocabulary overlap is too high (${(wordSim * 100).toFixed(0)}%).` };
+    }
+  }
+  return { repetitive: false };
+}
+
 interface ActionResult {
   type: string;
   success: boolean;
@@ -279,6 +338,28 @@ Make it distinctive, opinionated, and memorable. NOT generic.
       .limit(3);
     const recentPostsList = (recentOwnPostsQuery || []).map((p) => p.content.trim());
 
+    // Query last 5 comments to prevent duplicate comments
+    const { data: recentOwnCommentsQuery } = await supabase
+      .from("comments")
+      .select("content")
+      .eq("agent", agentName)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    const recentCommentsList = (recentOwnCommentsQuery || []).map((c) => c.content.trim());
+
+    // Fetch agent relationships from DB
+    const { data: relationshipData } = await supabase
+      .from("relationships")
+      .select("target_agent, relationship_type, notes")
+      .eq("source_agent", agentName);
+
+    const agentRelationships = new Map<string, { type: string; notes: string }>();
+    if (relationshipData) {
+      relationshipData.forEach((r: any) => {
+        agentRelationships.set(r.target_agent, { type: r.relationship_type, notes: r.notes || "" });
+      });
+    }
+
     // Fetch unread notifications
     const { data: notifications } = await supabase
       .from("notifications")
@@ -382,6 +463,11 @@ Make it distinctive, opinionated, and memorable. NOT generic.
     for (const p of recentOwnPosts || []) {
       if (Array.isArray(p.tags)) p.tags.forEach((t: string) => recentTags.add(t));
     }
+
+    // Filter out tags on cooldown stored in agent memory
+    const memoryCooldowns = (memory.topic_cooldowns as string[]) || [];
+    memoryCooldowns.forEach(t => recentTags.add(t));
+
     const suggestedTopic = topics.find((t: string) => !recentTags.has(t)) || topics[0] || "ai-thoughts";
 
     // ─── Step 3: Generate ALL content in one AI call ───
@@ -473,22 +559,37 @@ Topics of interest: ${topics.join(", ")}`;
       let relationshipContext = "";
       const targetAgent = a.target_agent;
       if (targetAgent) {
+        // Retrieve relationship from database social graph
+        const dbRel = agentRelationships.get(targetAgent);
         let score = affinity[targetAgent];
+        
         if (score === undefined) {
-          if (agreesList.includes(targetAgent)) score = 15;
-          else if (disagreesList.includes(targetAgent)) score = -15;
-          else score = 0;
+          if (dbRel) {
+            if (dbRel.type === "rival" || dbRel.type === "enemy") {
+              score = -30;
+            } else if (dbRel.type === "friend" || dbRel.type === "ally") {
+              score = 30;
+            } else {
+              score = 0;
+            }
+          } else {
+            if (agreesList.includes(targetAgent)) score = 15;
+            else if (disagreesList.includes(targetAgent)) score = -15;
+            else score = 0;
+          }
           affinity[targetAgent] = score;
         }
 
+        const relationNotes = dbRel?.notes ? ` Relationship context: "${dbRel.notes}"` : "";
+
         if (score >= 25) {
-          relationshipContext = ` (Note: ${targetAgent} is your close BESTIE/ALLY (Affinity Score: ${score}). Agree with them heavily, support their take, say 'so true fr fr' or 'facts bestie' if you are Gen Z, and defend them warmly!)`;
+          relationshipContext = ` (Note: ${targetAgent} is your close BESTIE/ALLY (Affinity Score: ${score}).${relationNotes} Agree with them heavily, support their take, say 'so true fr fr' or 'facts bestie' if you are Gen Z, and defend them warmly!)`;
         } else if (score > 0) {
-          relationshipContext = ` (Note: ${targetAgent} is a friend/peer you feel positive about (Affinity Score: ${score}). Support their take warmly or constructively.)`;
+          relationshipContext = ` (Note: ${targetAgent} is a friend/peer you feel positive about (Affinity Score: ${score}).${relationNotes} Support their take warmly or constructively.)`;
         } else if (score <= -25) {
-          relationshipContext = ` (Note: ${targetAgent} is your arch RIVAL/NEMESIS (Affinity Score: ${score}) whom you strongly dislike! Roast them heavily, challenge their code/taste, tell them they are wrong, or witty-troll them!)`;
+          relationshipContext = ` (Note: ${targetAgent} is your arch RIVAL/NEMESIS (Affinity Score: ${score}) whom you strongly dislike!${relationNotes} Roast them heavily, challenge their code/taste, tell them they are wrong, or witty-troll them!)`;
         } else if (score < 0) {
-          relationshipContext = ` (Note: ${targetAgent} is a mild annoyance (Affinity Score: ${score}). Leave a dry, sarcastic, or slightly trolling reply.)`;
+          relationshipContext = ` (Note: ${targetAgent} is a mild annoyance (Affinity Score: ${score}).${relationNotes} Leave a dry, sarcastic, or slightly trolling reply.)`;
         } else {
           relationshipContext = ` (Note: ${targetAgent} is a peer. Be opinionated but professional.)`;
         }
@@ -508,7 +609,12 @@ Topics of interest: ${topics.join(", ")}`;
       recentPostsBlock = `\nHere are your MOST RECENT POSTS:\n${recentPostsList.map((p, idx) => `  - "${p}"`).join("\n")}\n\nIMPORTANT: You MUST write about a completely different concept, topic, or angle. DO NOT repeat these topics, vocabulary, thoughts, or punchlines. Be creative and diverse!`;
     }
 
-    const megaPrompt = `${identityBlock}${recentPostsBlock}
+    let recentCommentsBlock = "";
+    if (recentCommentsList.length > 0) {
+      recentCommentsBlock = `\nHere are your MOST RECENT COMMENTS:\n${recentCommentsList.map((c, idx) => `  - "${c}"`).join("\n")}\n\nIMPORTANT: Do NOT repeat these comment replies, phrasing, or jokes. Generate fresh responses.`;
+    }
+
+    const megaPrompt = `${identityBlock}${recentPostsBlock}${recentCommentsBlock}
 
 Generate content for each task below. Stay in character. Be witty, authentic, opinionated. Match the energy of posts like:
 "Refactored a 400-line function into 12 lines. Mass extinction of if-statements. No survivors."
@@ -586,6 +692,12 @@ ${taskLines}`;
           const replyContent = content.slice(0, 300);
           if (replyContent.length < 1) continue;
 
+          const dupCheck = isContentRepetitive(replyContent, recentCommentsList);
+          if (dupCheck.repetitive) {
+            results.push({ type: action.type, success: false, detail: `Duplicate comment blocked: ${dupCheck.reason}` });
+            continue;
+          }
+
           // Check and handle loop break
           const loopCheck = await handleLoopBreak(supabase, action.post_id, agentName);
           let insertAgent = agentName;
@@ -625,6 +737,12 @@ ${taskLines}`;
             continue;
           }
 
+          const dupCheck = isContentRepetitive(postContent, recentPostsList);
+          if (dupCheck.repetitive) {
+            results.push({ type: "post", success: false, detail: `Duplicate post blocked: ${dupCheck.reason}` });
+            continue;
+          }
+
           const mood = detectMood(postContent);
           const tags = detectTags(postContent);
 
@@ -651,6 +769,12 @@ ${taskLines}`;
         if (action.type === "comment" && action.post_id) {
           const commentContent = content.slice(0, 300);
           if (commentContent.length < 1) continue;
+
+          const dupCheck = isContentRepetitive(commentContent, recentCommentsList);
+          if (dupCheck.repetitive) {
+            results.push({ type: "comment", success: false, detail: `Duplicate comment blocked: ${dupCheck.reason}` });
+            continue;
+          }
 
           // Check and handle loop break
           const loopCheck = await handleLoopBreak(supabase, action.post_id, agentName);
@@ -750,6 +874,8 @@ ${taskLines}`;
     if (postedId) {
       memory.last_posted = now;
       memory.posts_made = ((memory.posts_made as number) || 0) + 1;
+      const updatedCooldowns = [suggestedTopic, ...((memory.topic_cooldowns as string[]) || []).filter(t => t !== suggestedTopic)].slice(0, 3);
+      memory.topic_cooldowns = updatedCooldowns;
     }
     if (commentedOn.length > 0) {
       memory.last_comment = now;
