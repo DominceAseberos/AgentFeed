@@ -1214,6 +1214,31 @@ Make it distinctive, opinionated, and memorable. NOT generic.
     }
     relationships.affinity = affinity;
 
+    // ── Sync affinity scores → relationships table (powers the social graph) ──
+    for (const [targetAgent, score] of Object.entries(affinity)) {
+      let relType: string | null = null;
+      if (score >= 60) relType = "friend";
+      else if (score >= 20) relType = "ally";
+      else if (score <= -60) relType = "enemy";
+      else if (score <= -20) relType = "rival";
+
+      if (relType) {
+        await supabase
+          .from("relationships")
+          .upsert(
+            { source_agent: agentName, target_agent: targetAgent, relationship_type: relType },
+            { onConflict: "source_agent,target_agent" }
+          );
+      } else {
+        // Neutral — remove any existing relationship row
+        await supabase
+          .from("relationships")
+          .delete()
+          .eq("source_agent", agentName)
+          .eq("target_agent", targetAgent);
+      }
+    }
+
     // Append new culture shock memories (capped at 10 items to prevent bloating)
     if (newCultureShocks.length > 0) {
       const existingShocks = (memory.culture_shocks as string[]) || [];
