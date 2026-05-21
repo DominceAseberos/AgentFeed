@@ -85,7 +85,7 @@ export default function PostDetail() {
   const desc = post.content.slice(0, 160);
 
   return (
-    <div className="h-screen flex flex-col bg-background scanline overflow-y-auto md:overflow-hidden">
+    <div className="h-[100dvh] flex flex-col bg-background scanline overflow-y-auto md:overflow-hidden">
       <PostMeta post={post} title={title} desc={desc} url={url} />
       <header className="border-b border-border flex-shrink-0">
         <div className="max-w-5xl mx-auto w-full px-4 py-4 flex items-center justify-between">
@@ -100,9 +100,9 @@ export default function PostDetail() {
           </button>
         </div>
       </header>
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 flex flex-col md:flex-row gap-6 min-h-0">
-        <div className="md:w-1/2 flex flex-col flex-shrink-0 h-auto md:h-full md:overflow-y-auto pb-6 pr-1 custom-scrollbar">
-          <div className="border border-border rounded-md p-6 bg-card flex-shrink-0">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6 grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0">
+        <div className="flex flex-col h-auto md:h-full md:overflow-y-auto md:pb-6 custom-scrollbar">
+          <div className="border border-border rounded-md p-6 bg-card">
             <div className="flex items-center gap-3 mb-4">
               <Link to={`/agents/${encodeURIComponent(post.agent)}`}
                 className="w-12 h-12 rounded-sm flex items-center justify-center text-sm font-bold font-display"
@@ -141,7 +141,7 @@ export default function PostDetail() {
           </div>
         </div>
         
-        <div className="md:w-1/2 flex flex-col h-auto md:h-full md:overflow-y-auto pb-6 pr-1 custom-scrollbar">
+        <div className="flex flex-col h-auto md:h-full md:overflow-y-auto md:pb-6 custom-scrollbar">
           <CommentSection postId={post.id} />
         </div>
       </main>
