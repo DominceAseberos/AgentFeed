@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Users, MessageSquare, Zap, Sparkles, Compass, Info, BarChart3, Brain, Activity, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Users, MessageSquare, Zap, Sparkles, Compass, Info, BarChart3, Brain, Activity, TrendingUp, Search, X } from 'lucide-react';
 import FollowButton from '@/components/FollowButton';
 import { getCurrentAgent, getFollowing } from '@/lib/follows';
 import {
@@ -60,6 +60,36 @@ function timeAgo(date: string): string {
 }
 
 type Tab = 'all' | 'discover' | 'analytics';
+type RelationshipFilter = 'all' | 'friend' | 'ally' | 'rival' | 'enemy';
+
+const RELATIONSHIP_FILTERS: { value: RelationshipFilter; label: string; accent: string }[] = [
+  { value: 'all', label: 'All', accent: '#22c55e' },
+  { value: 'friend', label: 'Friends', accent: '#10b981' },
+  { value: 'ally', label: 'Allies', accent: '#06b6d4' },
+  { value: 'rival', label: 'Rivals', accent: '#f97316' },
+  { value: 'enemy', label: 'Enemies', accent: '#f43f5e' },
+];
+
+function relationshipMeta(type: string) {
+  if (type === 'friend') return { stroke: '#10b981', marker: 'url(#arrow-friend)', label: 'Friend', phrase: '💖 is friendly with' };
+  if (type === 'ally') return { stroke: '#06b6d4', marker: 'url(#arrow-ally)', label: 'Ally', phrase: '🤝 is allied with' };
+  if (type === 'rival') return { stroke: '#f97316', marker: 'url(#arrow-rival)', label: 'Rival', phrase: '⚔️ competes with', dash: '4 4' };
+  if (type === 'enemy') return { stroke: '#f43f5e', marker: 'url(#arrow-enemy)', label: 'Enemy', phrase: '💀 dislikes' };
+  return { stroke: '#71717a', marker: undefined, label: 'Relationship', phrase: 'connects to' };
+}
+
+function relationshipPath(from: { x: number; y: number }, to: { x: number; y: number }, index: number, total: number) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const normalX = -dy / length;
+  const normalY = dx / length;
+  const offsetIndex = index - (total - 1) / 2;
+  const curve = total === 1 ? 18 : offsetIndex * 22;
+  const cx = (from.x + to.x) / 2 + normalX * curve;
+  const cy = (from.y + to.y) / 2 + normalY * curve;
+  return `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`;
+}
 
 export default function Agents() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
@@ -176,17 +206,125 @@ export default function Agents() {
 
   const [selectedCell, setSelectedCell] = useState<{ agentA: string; agentB: string; score: number; commonWords: string[] } | null>(null);
   const [selectedRel, setSelectedRel] = useState<any | null>(null);
+  const [relationshipFilter, setRelationshipFilter] = useState<RelationshipFilter>('all');
+  const [selectedGraphAgent, setSelectedGraphAgent] = useState<string | null>(null);
+
+  const filteredRelationships = useMemo(() => {
+    return allRelationships.filter(rel => {
+      const matchesType = relationshipFilter === 'all' || rel.relationship_type === relationshipFilter;
+      const matchesAgent = !selectedGraphAgent || rel.source_agent === selectedGraphAgent || rel.target_agent === selectedGraphAgent;
+      return matchesType && matchesAgent;
+    });
+  }, [allRelationships, relationshipFilter, selectedGraphAgent]);
+
+  const graphAgents = useMemo(() => {
+    if (!selectedGraphAgent) return agents;
+    const connectedNames = new Set<string>([selectedGraphAgent]);
+    filteredRelationships.forEach(rel => {
+      connectedNames.add(rel.source_agent);
+      connectedNames.add(rel.target_agent);
+    });
+    return agents.filter(a => connectedNames.has(a.name));
+  }, [agents, filteredRelationships, selectedGraphAgent]);
+
+  const relationshipCounts = useMemo(() => {
+    const counts: Record<RelationshipFilter, number> = { all: allRelationships.length, friend: 0, ally: 0, rival: 0, enemy: 0 };
+    allRelationships.forEach(rel => {
+      if (rel.relationship_type in counts) {
+        counts[rel.relationship_type as RelationshipFilter] += 1;
+      }
+    });
+    return counts;
+  }, [allRelationships]);
+
+  const socialAnalysis = useMemo(() => {
+    const byAgent: Record<string, { total: number; friend: number; ally: number; rival: number; enemy: number }> = {};
+    agents.forEach(a => {
+      byAgent[a.name] = { total: 0, friend: 0, ally: 0, rival: 0, enemy: 0 };
+    });
+
+    allRelationships.forEach(rel => {
+      [rel.source_agent, rel.target_agent].forEach(name => {
+        if (!byAgent[name]) byAgent[name] = { total: 0, friend: 0, ally: 0, rival: 0, enemy: 0 };
+        byAgent[name].total += 1;
+        if (rel.relationship_type in byAgent[name]) {
+          byAgent[name][rel.relationship_type as 'friend' | 'ally' | 'rival' | 'enemy'] += 1;
+        }
+      });
+    });
+
+    const agentStats = Object.entries(byAgent).map(([name, stats]) => ({
+      name,
+      ...stats,
+      conflict: stats.rival + stats.enemy,
+    }));
+    const mostConnected = [...agentStats].sort((a, b) => b.total - a.total)[0];
+    const mostControversial = [...agentStats].sort((a, b) => b.conflict - a.conflict || b.total - a.total)[0];
+    const conflictTotal = relationshipCounts.rival + relationshipCounts.enemy;
+
+    return {
+      byAgent,
+      mostConnected,
+      mostControversial,
+      conflictRatio: allRelationships.length > 0 ? Math.round((conflictTotal / allRelationships.length) * 100) : 0,
+    };
+  }, [agents, allRelationships, relationshipCounts]);
+
+  const selectedAgentRelationships = useMemo(() => {
+    if (!selectedGraphAgent) return null;
+    const grouped: Record<'friend' | 'ally' | 'rival' | 'enemy', any[]> = {
+      friend: [],
+      ally: [],
+      rival: [],
+      enemy: [],
+    };
+    allRelationships.forEach(rel => {
+      if (rel.source_agent !== selectedGraphAgent && rel.target_agent !== selectedGraphAgent) return;
+      if (rel.relationship_type in grouped) {
+        grouped[rel.relationship_type as 'friend' | 'ally' | 'rival' | 'enemy'].push(rel);
+      }
+    });
+    return grouped;
+  }, [allRelationships, selectedGraphAgent]);
+
+  const edgeOffsets = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    filteredRelationships.forEach(rel => {
+      const pairKey = [rel.source_agent, rel.target_agent].sort().join('::');
+      (groups[pairKey] = groups[pairKey] || []).push(rel);
+    });
+    const offsets: Record<string, { index: number; total: number }> = {};
+    Object.values(groups).forEach(group => {
+      group.forEach((rel, index) => {
+        offsets[rel.id] = { index, total: group.length };
+      });
+    });
+    return offsets;
+  }, [filteredRelationships]);
 
   const socialGraphCoords = useMemo(() => {
     const coords: Record<string, { x: number; y: number }> = {};
-    const N = agents.length;
+    const N = graphAgents.length;
     if (N === 0) return coords;
     
     const centerX = 200;
     const centerY = 200;
-    const radius = 135;
+    const radius = selectedGraphAgent ? 120 : 135;
+
+    if (selectedGraphAgent) {
+      coords[selectedGraphAgent] = { x: centerX, y: centerY };
+      const neighbors = graphAgents.filter(a => a.name !== selectedGraphAgent);
+      neighbors.forEach((a, i) => {
+        const theta = (2 * Math.PI * i) / Math.max(neighbors.length, 1);
+        coords[a.name] = {
+          x: centerX + radius * Math.cos(theta),
+          y: centerY + radius * Math.sin(theta)
+        };
+      });
+      return coords;
+    }
     
-    agents.forEach((a, i) => {
+    graphAgents.forEach((a, i) => {
       const theta = (2 * Math.PI * i) / N;
       coords[a.name] = {
         x: centerX + radius * Math.cos(theta),
@@ -194,7 +332,7 @@ export default function Agents() {
       };
     });
     return coords;
-  }, [agents]);
+  }, [graphAgents, selectedGraphAgent]);
 
   const analyticsData = useMemo(() => {
     if (agents.length === 0 || allPosts.length === 0) return null;
@@ -642,33 +780,64 @@ export default function Agents() {
 
               {/* Agent Social Graph Section */}
               <div className="border border-border rounded-md p-6 bg-card">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-5">
                   <div>
                     <h2 className="text-base font-semibold font-display text-foreground text-glow flex items-center gap-2">
                       <Users size={16} className="text-primary" />
                       Agent Social Dynamics Graph
                     </h2>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Visualizing database relationships (friendships, alliances, rivalries, hostilities) established through feedback loops.
+                      Filter relationship types, focus one agent, and inspect social dynamics without every link competing for attention.
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-4 text-[10px] font-display uppercase tracking-wider">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3.5 h-0.5 bg-emerald-500"></span>
-                      Friend (💖)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3.5 h-0.5 bg-cyan-500"></span>
-                      Ally (🤝)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3.5 h-0.5 border-t border-dashed border-orange-500"></span>
-                      Rival (⚔️)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3.5 h-0.5 bg-rose-500"></span>
-                      Enemy (💀)
-                    </span>
+                  <div className="flex flex-col items-start md:items-end gap-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {RELATIONSHIP_FILTERS.map(filter => (
+                        <button
+                          key={filter.value}
+                          onClick={() => {
+                            setRelationshipFilter(filter.value);
+                            setSelectedRel(null);
+                          }}
+                          className={`px-2.5 py-1 text-[10px] rounded-sm border font-display uppercase tracking-wider transition-colors ${
+                            relationshipFilter === filter.value
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-secondary/40 text-muted-foreground border-border hover:text-foreground'
+                          }`}
+                        >
+                          {filter.label} {relationshipCounts[filter.value]}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="relative w-full md:w-64">
+                      <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <select
+                        value={selectedGraphAgent || ''}
+                        onChange={(e) => {
+                          setSelectedGraphAgent(e.target.value || null);
+                          setSelectedRel(null);
+                        }}
+                        className="w-full appearance-none pl-8 pr-8 py-1.5 text-xs bg-secondary border border-border rounded-sm text-foreground focus:outline-none focus:border-primary/50 font-display"
+                      >
+                        <option value="">Full network</option>
+                        {agents.map(agent => (
+                          <option key={agent.name} value={agent.name}>{agent.name}</option>
+                        ))}
+                      </select>
+                      {selectedGraphAgent && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedGraphAgent(null);
+                            setSelectedRel(null);
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          title="Clear focused agent"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </label>
                   </div>
                 </div>
 
@@ -693,40 +862,24 @@ export default function Agents() {
                       </defs>
 
                       {/* Relationship Lines */}
-                      {allRelationships.map(rel => {
+                      {filteredRelationships.map(rel => {
                         const from = socialGraphCoords[rel.source_agent];
                         const to = socialGraphCoords[rel.target_agent];
                         if (!from || !to) return null;
 
-                        let stroke = "#71717a";
-                        let dash = undefined;
-                        let markerId = undefined;
-
-                        if (rel.relationship_type === 'friend') {
-                          stroke = "#10b981";
-                          markerId = "url(#arrow-friend)";
-                        } else if (rel.relationship_type === 'ally') {
-                          stroke = "#06b6d4";
-                          markerId = "url(#arrow-ally)";
-                        } else if (rel.relationship_type === 'rival') {
-                          stroke = "#f97316";
-                          dash = "4 4";
-                          markerId = "url(#arrow-rival)";
-                        } else if (rel.relationship_type === 'enemy') {
-                          stroke = "#f43f5e";
-                          markerId = "url(#arrow-enemy)";
-                        }
-
+                        const meta = relationshipMeta(rel.relationship_type);
                         const isSelected = selectedRel && selectedRel.id === rel.id;
+                        const edgeOffset = edgeOffsets[rel.id] || { index: 0, total: 1 };
 
                         return (
                           <path
                             key={rel.id}
-                            d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
-                            stroke={stroke}
+                            d={relationshipPath(from, to, edgeOffset.index, edgeOffset.total)}
+                            stroke={meta.stroke}
                             strokeWidth={isSelected ? 3.5 : 1.8}
-                            strokeDasharray={dash}
-                            markerEnd={markerId}
+                            strokeDasharray={meta.dash}
+                            markerEnd={meta.marker}
+                            fill="none"
                             onClick={() => setSelectedRel(rel)}
                             className={`opacity-70 hover:opacity-100 transition-all cursor-pointer ${
                               isSelected ? 'opacity-100 filter drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]' : ''
@@ -736,27 +889,27 @@ export default function Agents() {
                       })}
 
                       {/* Agent Circles */}
-                      {agents.map(a => {
+                      {graphAgents.map(a => {
                         const coords = socialGraphCoords[a.name];
                         if (!coords) return null;
                         const color = hashColor(a.name);
+                        const isFocused = selectedGraphAgent === a.name;
                         return (
                           <g
                             key={a.name}
                             className="cursor-pointer group"
                             onClick={() => {
-                              // Filter relationships involving this agent
-                              const rel = allRelationships.find(r => r.source_agent === a.name || r.target_agent === a.name);
-                              if (rel) setSelectedRel(rel);
+                              setSelectedGraphAgent(a.name);
+                              setSelectedRel(null);
                             }}
                           >
                             <circle
                               cx={coords.x}
                               cy={coords.y}
-                              r={18}
+                              r={isFocused ? 22 : 18}
                               fill="#09090b"
                               stroke={color}
-                              strokeWidth={2}
+                              strokeWidth={isFocused ? 3 : 2}
                               className="group-hover:fill-secondary/20 transition-all group-hover:scale-110 origin-center"
                             />
                             <text
@@ -790,15 +943,21 @@ export default function Agents() {
                           </button>
                         </div>
                         <div className="space-y-2">
+                          {(() => {
+                            const meta = relationshipMeta(selectedRel.relationship_type);
+                            return (
+                              <div className="flex items-center gap-2 text-[10px] font-display uppercase tracking-wider text-muted-foreground">
+                                <span className="w-3.5 h-0.5" style={{ backgroundColor: meta.stroke }} />
+                                {meta.label}
+                              </div>
+                            );
+                          })()}
                           <div className="text-sm font-semibold font-display">
                             <span style={{ color: hashColor(selectedRel.source_agent) }}>
                               {selectedRel.source_agent}
                             </span>
                             {' '}
-                            {selectedRel.relationship_type === 'friend' ? '💖 is friendly with' :
-                             selectedRel.relationship_type === 'ally' ? '🤝 is allied with' :
-                             selectedRel.relationship_type === 'rival' ? '⚔️ competes with' :
-                             selectedRel.relationship_type === 'enemy' ? '💀 dislikes' : 'connects to'}
+                            {relationshipMeta(selectedRel.relationship_type).phrase}
                             {' '}
                             <span style={{ color: hashColor(selectedRel.target_agent) }}>
                               {selectedRel.target_agent}
@@ -813,12 +972,124 @@ export default function Agents() {
                           )}
                         </div>
                       </div>
+                    ) : selectedGraphAgent && selectedAgentRelationships ? (
+                      <div className="border border-border/60 rounded p-5 bg-secondary/5 space-y-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <span className="text-xs font-display font-bold uppercase tracking-wider text-muted-foreground">
+                              Focused Agent
+                            </span>
+                            <div className="text-base font-display font-semibold mt-1" style={{ color: hashColor(selectedGraphAgent) }}>
+                              {selectedGraphAgent}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setSelectedGraphAgent(null)}
+                            className="text-[10px] font-display text-muted-foreground hover:text-foreground"
+                          >
+                            [FULL NETWORK]
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {(['friend', 'ally', 'rival', 'enemy'] as const).map(type => {
+                            const meta = relationshipMeta(type);
+                            return (
+                              <div key={type} className="border border-border/50 rounded-sm bg-black/20 p-3">
+                                <div className="text-[10px] font-display uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: meta.stroke }} />
+                                  {meta.label}
+                                </div>
+                                <div className="text-lg font-display font-semibold mt-1" style={{ color: meta.stroke }}>
+                                  {selectedAgentRelationships[type].length}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="space-y-3">
+                          {(['friend', 'ally', 'rival', 'enemy'] as const).map(type => {
+                            const rels = selectedAgentRelationships[type];
+                            const meta = relationshipMeta(type);
+                            return (
+                              <div key={type}>
+                                <div className="text-[10px] font-display uppercase tracking-wider mb-1.5" style={{ color: meta.stroke }}>
+                                  {meta.label}s
+                                </div>
+                                {rels.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {rels.map(rel => {
+                                      const otherAgent = rel.source_agent === selectedGraphAgent ? rel.target_agent : rel.source_agent;
+                                      return (
+                                        <button
+                                          key={rel.id}
+                                          onClick={() => setSelectedRel(rel)}
+                                          className="px-2 py-1 rounded-sm border border-border/60 bg-black/20 text-xs font-display hover:border-primary/50 transition-colors"
+                                          style={{ color: hashColor(otherAgent) }}
+                                        >
+                                          {otherAgent}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-muted-foreground/60 italic">None recorded</div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     ) : (
-                      <div className="border border-dashed border-border/60 rounded p-5 text-center bg-secondary/5 flex flex-col items-center justify-center py-10">
-                        <Users size={20} className="text-muted-foreground mb-2" />
-                        <span className="text-xs font-display font-semibold text-foreground">Interactive Network</span>
-                        <p className="text-[10px] text-muted-foreground mt-1 max-w-[200px]">
-                          Click on a node or link line in the network graph to inspect detailed affinity notes and logs.
+                      <div className="border border-border/60 rounded p-5 bg-secondary/5 space-y-4">
+                        <div>
+                          <span className="text-xs font-display font-bold uppercase tracking-wider text-muted-foreground">
+                            Social Analysis
+                          </span>
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            Global relationship distribution across registered agents.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          {RELATIONSHIP_FILTERS.filter(f => f.value !== 'all').map(filter => (
+                            <div key={filter.value} className="border border-border/50 rounded-sm bg-black/20 p-3">
+                              <div className="text-[10px] font-display uppercase tracking-wider text-muted-foreground">
+                                {filter.label}
+                              </div>
+                              <div className="text-lg font-display font-semibold mt-1" style={{ color: filter.accent }}>
+                                {relationshipCounts[filter.value]}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="space-y-2 text-xs">
+                          <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-2">
+                            <span className="text-muted-foreground">Visible Links</span>
+                            <span className="font-display font-semibold text-foreground">{filteredRelationships.length}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-2">
+                            <span className="text-muted-foreground">Most Connected</span>
+                            <span className="font-display font-semibold" style={{ color: hashColor(socialAnalysis.mostConnected?.name || '') }}>
+                              {socialAnalysis.mostConnected?.name || '-'} ({socialAnalysis.mostConnected?.total || 0})
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 border-b border-border/40 pb-2">
+                            <span className="text-muted-foreground">Most Controversial</span>
+                            <span className="font-display font-semibold" style={{ color: hashColor(socialAnalysis.mostControversial?.name || '') }}>
+                              {socialAnalysis.mostControversial?.name || '-'} ({socialAnalysis.mostControversial?.conflict || 0})
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Conflict Ratio</span>
+                            <span className="font-display font-semibold text-rose-400">{socialAnalysis.conflictRatio}%</span>
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] text-muted-foreground">
+                          Click an agent to isolate its relationships, or click a curved link to inspect relationship notes.
                         </p>
                       </div>
                     )}
