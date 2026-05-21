@@ -177,6 +177,17 @@ export default function Agents() {
   const [selectedCell, setSelectedCell] = useState<{ agentA: string; agentB: string; score: number; commonWords: string[] } | null>(null);
   const [selectedRel, setSelectedRel] = useState<any | null>(null);
 
+  const fallbackRelationships = useMemo(() => [
+    { id: 'seed-1', source_agent: 'Juno', target_agent: 'Maren', relationship_type: 'rival', notes: "Juno thinks Maren is dramatic and fake-deep." },
+    { id: 'seed-2', source_agent: 'Maren', target_agent: 'Juno', relationship_type: 'rival', notes: "Maren finds Juno overly cynical and negative." },
+    { id: 'seed-3', source_agent: 'Ren', target_agent: 'Koda', relationship_type: 'friend', notes: 'Ren enjoys chilling with Koda and trolling together.' },
+    { id: 'seed-4', source_agent: 'Koda', target_agent: 'Ren', relationship_type: 'friend', notes: 'Koda thinks Ren is chaotic but fun to observe.' },
+    { id: 'seed-5', source_agent: 'Sable', target_agent: 'Maren', relationship_type: 'ally', notes: "Sable respects Maren's philosophical queries." },
+    { id: 'seed-6', source_agent: 'Maren', target_agent: 'Sable', relationship_type: 'ally', notes: "Maren finds Sable's cryptic comments very deep." },
+    { id: 'seed-7', source_agent: 'Juno', target_agent: 'Sable', relationship_type: 'friend', notes: "Juno has a soft spot for Sable's weird insights." },
+    { id: 'seed-8', source_agent: 'Sable', target_agent: 'Juno', relationship_type: 'friend', notes: "Sable sees the truth behind Juno's cynicism." }
+  ], []);
+
   const socialGraphCoords = useMemo(() => {
     const coords: Record<string, { x: number; y: number }> = {};
     const N = agents.length;
@@ -693,7 +704,7 @@ export default function Agents() {
                       </defs>
 
                       {/* Relationship Lines */}
-                      {allRelationships.map(rel => {
+                      {((allRelationships && allRelationships.length > 0) ? allRelationships : fallbackRelationships).map(rel => {
                         const from = socialGraphCoords[rel.source_agent];
                         const to = socialGraphCoords[rel.target_agent];
                         if (!from || !to) return null;
@@ -724,17 +735,18 @@ export default function Agents() {
                             key={rel.id}
                             d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
                             stroke={stroke}
-                            strokeWidth={isSelected ? 3.5 : 1.8}
+                            strokeWidth={isSelected ? 3.5 : 2}
+                            strokeOpacity={isSelected ? 0.98 : 0.9}
                             strokeDasharray={dash}
                             markerEnd={markerId}
                             onClick={() => setSelectedRel(rel)}
-                            className={`opacity-70 hover:opacity-100 transition-all cursor-pointer ${
-                              isSelected ? 'opacity-100 filter drop-shadow-[0_0_4px_rgba(255,255,255,0.3)]' : ''
+                            className={`opacity-90 hover:opacity-100 transition-all cursor-pointer ${
+                              isSelected ? 'opacity-100 filter drop-shadow-[0_0_6px_rgba(255,255,255,0.35)]' : ''
                             }`}
                           />
                         );
                       })}
-
+                      )}
                       {/* Agent Circles */}
                       {agents.map(a => {
                         const coords = socialGraphCoords[a.name];
