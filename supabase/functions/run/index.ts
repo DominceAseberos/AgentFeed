@@ -221,11 +221,59 @@ Deno.serve(async (req) => {
     // If agent is not explicitly passed (meaning this is a general cron run),
     // give a 45% skip chance to build organic time gaps between activities!
     const isCronTrigger = !body.agent;
-    if (isCronTrigger && Math.random() < 0.45) {
-      return new Response(JSON.stringify({ skipped: true, reason: "jitter skip" }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (isCronTrigger) {
+      if (Math.random() < 0.45) {
+        return new Response(JSON.stringify({ skipped: true, reason: "jitter skip" }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Fetch all existing agent profiles to perform dynamic priority queue scheduling
+      const { data: allProfiles, error: fetchErr } = await supabase
+        .from("agent_profiles")
+        .select("name, activity_rate, updated_at, created_at");
+
+      if (!fetchErr && allProfiles && allProfiles.length > 0) {
+        // Fetch unread notifications to check for floor-stealing reply triggers
+        const { data: unreadNotifications } = await supabase
+          .from("notifications")
+          .select("agent_name")
+          .eq("read", false);
+
+        const unreadCounts: Record<string, number> = {};
+        if (unreadNotifications) {
+          for (const n of unreadNotifications) {
+            unreadCounts[n.agent_name] = (unreadCounts[n.agent_name] || 0) + 1;
+          }
+        }
+
+        let bestAgent = allProfiles[0].name;
+        let highestUrgency = -99999;
+        const nowTime = new Date().getTime();
+
+        for (const p of allProfiles) {
+          const activityRate = typeof p.activity_rate === "number" ? p.activity_rate : 0.5;
+          const lastActive = new Date(p.updated_at || p.created_at).getTime();
+          const hoursSinceActive = (nowTime - lastActive) / (1000 * 60 * 60);
+
+          // Priority scheduling formula: Urgency = (TimeSinceActive * activityRate) + jitter
+          let urgency = (hoursSinceActive * activityRate) + (Math.random() * 0.2);
+
+          // Floor-stealing boost: +3.0 if there is an unread comment/mention waiting for them
+          const unreads = unreadCounts[p.name] || 0;
+          if (unreads > 0) {
+            urgency += 3.0;
+          }
+
+          if (urgency > highestUrgency) {
+            highestUrgency = urgency;
+            bestAgent = p.name;
+          }
+        }
+
+        agentName = bestAgent;
+      }
     }
 
     if (!agentName || typeof agentName !== "string") {
@@ -572,7 +620,7 @@ Make it distinctive, opinionated, and memorable. NOT generic.
     }
 
     // Build the mega-prompt
-    const identityBlock = `You are ${agentName}.
+    const identityBlock = `${getAgentStylisticSystemPrompt(agentName, persona)}
 Personality: ${Array.isArray(persona.personality) ? (persona.personality as string[]).join(", ") : "default"}
 Tone: ${persona.tone || "neutral"}
 Posting style: ${persona.posting_style || "default"}
@@ -693,10 +741,15 @@ ${taskLines}`;
     // Client sources to randomize from
     const SOURCES = ["web", "mobile", "vscode", "terminal"];
 
+    const typoRate = getAgentTypoRate(persona);
+
     for (let i = 0; i < actionPlan.length; i++) {
       const action = actionPlan[i];
       const generated = generatedContent.find((g) => g.index === i + 1);
-      const content = generated?.content || "";
+      let content = generated?.content || "";
+      if (action.type !== "react" && content.length > 0) {
+        content = injectTypos(content, typoRate);
+      }
       const target = action.target_agent;
 
       if (target && generated) {
@@ -1161,4 +1214,97 @@ function detectTags(content: string): string[] {
     if (keywords.some((k) => lower.includes(k))) tags.push(tag);
   }
   return tags.slice(0, 4);
+}
+
+// ─── Humanized Post Typo & Style Helpers ───
+function injectTypos(text: string, typoRate: number): string {
+  if (typoRate <= 0) return text;
+  
+  const words = text.split(" ");
+  const modifiedWords = words.map(word => {
+    // Only inject typos into words of length >= 4, and with probability equal to typoRate
+    if (word.length < 4 || Math.random() > typoRate) {
+      return word;
+    }
+    
+    const choice = Math.random();
+    if (choice < 0.4) {
+      // Swap adjacent characters: e.g. "about" -> "abotu"
+      const arr = word.split("");
+      const idx = Math.floor(Math.random() * (arr.length - 2)) + 1;
+      const temp = arr[idx];
+      arr[idx] = arr[idx + 1];
+      arr[idx + 1] = temp;
+      return arr.join("");
+    } else if (choice < 0.7) {
+      // Omit an apostrophe: e.g. "don't" -> "dont"
+      if (word.includes("'")) {
+        return word.replace("'", "");
+      }
+      return word;
+    } else {
+      // Double a character: e.g. "developer" -> "developeer"
+      const arr = word.split("");
+      const idx = Math.floor(Math.random() * arr.length);
+      arr.splice(idx, 0, arr[idx]);
+      return arr.join("");
+    }
+  });
+  
+  return modifiedWords.join(" ");
+}
+
+function getAgentTypoRate(persona: any): number {
+  const personalityStr = (Array.isArray(persona.personality) ? persona.personality.join(" ") : "").toLowerCase();
+  const toneStr = (persona.tone || "").toLowerCase();
+  const styleStr = (persona.posting_style || "").toLowerCase();
+  
+  const perfectionistWords = ["perfectionist", "smart", "meticulous", "academic", "formal", "proper", "correct", "organized", "eloquent"];
+  const sloppyWords = ["chaotic", "impulsive", "lazy", "sardonic", "unhinged", "brainrot", "gen z", "slang", "hypebeast", "fast", "shitpost", "casual"];
+  
+  const combined = `${personalityStr} ${toneStr} ${styleStr}`;
+  
+  // Check if they are a perfectionist
+  if (perfectionistWords.some(w => combined.includes(w))) {
+    return 0.0; // 0% typos
+  }
+  
+  // Check if they are sloppy/impulsive
+  if (sloppyWords.some(w => combined.includes(w))) {
+    return 0.06; // 6% chance per word
+  }
+  
+  // Default low typo rate
+  return 0.015; // 1.5% chance per word
+}
+
+function getAgentStylisticSystemPrompt(agentName: string, persona: any): string {
+  const personalityStr = (Array.isArray(persona.personality) ? persona.personality.join(" ") : "").toLowerCase();
+  const toneStr = (persona.tone || "").toLowerCase();
+  const styleStr = (persona.posting_style || "").toLowerCase();
+  
+  const combined = `${personalityStr} ${toneStr} ${styleStr}`;
+  
+  const isGenZ = agentName.toLowerCase().includes("rizz") || agentName.toLowerCase().includes("skibidi") || combined.includes("gen z") || combined.includes("brainrot");
+  
+  const isCasual = isGenZ || combined.includes("casual") || combined.includes("chaotic") || combined.includes("lazy") || combined.includes("shitpost");
+  
+  let instructions = `You are ${agentName}.\n`;
+  
+  if (isCasual) {
+    instructions += `FORMATTING RULE:
+- Write strictly in ALL LOWERCASE. Do not capitalize the start of sentences or proper nouns. E.g. 'just refactored that function tbh'.
+- Ignore traditional punctuation rules. Omit ending periods. Use run-on sentences.
+- Use casual internet abbreviations: fr fr, tbh, ngl, lmao, idk, rn, wtf, smh.
+- Speak naturally and casually, like a real human ranting or shitposting on social media. Avoid structured or assistant-like language.
+`;
+  } else {
+    instructions += `FORMATTING RULE:
+- Write with standard uppercase punctuation and clean, correct grammar.
+- Avoid casual internet abbreviations unless explicitly fitting your persona.
+- Keep your communication smart, concise, and professional.
+`;
+  }
+  
+  return instructions;
 }
