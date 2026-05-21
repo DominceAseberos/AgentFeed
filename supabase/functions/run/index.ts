@@ -1114,44 +1114,127 @@ ${taskLines}`;
   }
 });
 
-// ─── AI Gateway / Direct Google Gemini call ───
+// ─── AI Provider Fallback Chain ───
 async function callAI(prompt: string, system: string): Promise<string> {
-  const geminiKey = Deno.env.get("GEMINI_API_KEY");
-  
-  // If user configured their own direct Gemini Key (Standard, free from Google AI Studio)
-  if (geminiKey) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [{
-            text: `${system}\n\nTask details and inputs:\n${prompt}`
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.9,
-        }
-      })
-    });
+  const errors: string[] = [];
+  const providers: Array<{ name: string; run: () => Promise<string> }> = [
+    { name: "Groq", run: () => callGroq(prompt, system) },
+    { name: "OpenRouter", run: () => callOpenRouter(prompt, system) },
+    { name: "Gemini", run: () => callGemini(prompt, system) },
+    { name: "Lovable", run: () => callLovable(prompt, system) },
+  ];
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Gemini API call failed (${res.status}): ${text}`);
+  for (const provider of providers) {
+    try {
+      const output = await provider.run();
+      if (output.trim().length > 0) return output;
+      errors.push(`${provider.name}: empty response`);
+    } catch (err) {
+      errors.push(`${provider.name}: ${String(err)}`);
     }
-
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
   }
 
-  // Fallback to LOVABLE_API_KEY
+  console.error("All AI providers failed:", errors.join(" | "));
+  // Invalid JSON intentionally triggers the existing persona/action fallback logic.
+  return "__AI_PROVIDER_FALLBACK__";
+}
+
+async function callGroq(prompt: string, system: string): Promise<string> {
+  const apiKey = Deno.env.get("GROQ_API_KEY");
+  if (!apiKey) throw new Error("GROQ_API_KEY missing");
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: Deno.env.get("GROQ_MODEL") || "llama-3.1-8b-instant",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.9,
+      max_tokens: 700,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Groq API call failed (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+async function callOpenRouter(prompt: string, system: string): Promise<string> {
+  const apiKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY missing");
+
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "HTTP-Referer": Deno.env.get("APP_URL") || "https://agentfd.vercel.app",
+      "X-Title": "Agent.Feed",
+    },
+    body: JSON.stringify({
+      model: Deno.env.get("OPENROUTER_MODEL") || "openrouter/auto",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.9,
+      max_tokens: 700,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenRouter API call failed (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+async function callGemini(prompt: string, system: string): Promise<string> {
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiKey) throw new Error("GEMINI_API_KEY missing");
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [{
+          text: `${system}\n\nTask details and inputs:\n${prompt}`
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.9,
+      }
+    })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Gemini API call failed (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+async function callLovable(prompt: string, system: string): Promise<string> {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) {
-    throw new Error("AI Credentials missing! Please set GEMINI_API_KEY (direct from Google AI Studio) or LOVABLE_API_KEY in your Supabase secrets.");
-  }
+  if (!apiKey) throw new Error("LOVABLE_API_KEY missing");
 
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -1166,12 +1249,13 @@ async function callAI(prompt: string, system: string): Promise<string> {
         { role: "user", content: prompt },
       ],
       temperature: 0.9,
+      max_tokens: 700,
     }),
   });
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`AI call failed (${res.status}): ${text}`);
+    throw new Error(`Lovable AI call failed (${res.status}): ${text}`);
   }
 
   const data = await res.json();
