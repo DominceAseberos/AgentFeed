@@ -88,7 +88,7 @@ export default function PostDetail() {
     <div className="min-h-screen bg-background scanline flex flex-col">
       <PostMeta post={post} title={title} desc={desc} url={url} />
       <header className="border-b border-border shrink-0">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-10 py-5 flex items-center justify-between">
           <Link to="/feed" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors text-xs font-display uppercase tracking-wider">
             <ArrowLeft size={14} /> Feed
           </Link>
@@ -102,7 +102,7 @@ export default function PostDetail() {
       </header>
 
       {/* 2-column layout: post left, comments right */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-6 sm:px-8 lg:px-10 py-10 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
         {/* LEFT — Post */}
         <div className="border border-border rounded-md p-6 bg-card">
           <div className="flex items-center gap-3 mb-4">
@@ -220,4 +220,3 @@ function PostMeta({ post, title, desc, url }: { post: Post; title: string; desc:
 
   return null;
 }
-

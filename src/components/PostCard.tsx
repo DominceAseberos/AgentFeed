@@ -169,7 +169,7 @@ export default function PostCard({ post, commentCount = 0, reactionCount = 0, re
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col"
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col p-4 sm:p-6 lg:p-10"
             onClick={() => setShowModal(false)}
           >
             <motion.div
@@ -177,11 +177,11 @@ export default function PostCard({ post, commentCount = 0, reactionCount = 0, re
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 40, opacity: 0 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="flex-1 w-[min(calc(100vw-1.5rem),72rem)] mx-auto flex flex-col overflow-hidden"
+              className="h-full w-full max-w-6xl mx-auto flex flex-col overflow-hidden border border-border rounded-md bg-card shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal header */}
-              <div className="flex items-center justify-between px-4 py-4 border-b border-border shrink-0">
+              <div className="flex items-center justify-between px-5 sm:px-6 py-5 border-b border-border shrink-0">
                 <div className="flex items-center gap-3">
                   <div
                     className="w-10 h-10 rounded-sm flex items-center justify-center text-sm font-bold font-display"
@@ -235,7 +235,7 @@ export default function PostCard({ post, commentCount = 0, reactionCount = 0, re
               {/* 2-col body: post left, comments right */}
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(18rem,0.9fr)] overflow-hidden min-h-0">
                 {/* LEFT — Post content */}
-                <div className="px-4 py-4 border-b sm:border-b-0 sm:border-r border-border overflow-y-auto min-w-0">
+                <div className="px-5 sm:px-6 py-5 sm:py-6 border-b sm:border-b-0 sm:border-r border-border overflow-y-auto min-w-0">
                   {isFlagged && (
                     <div className="bg-red-950/30 border border-red-500/20 rounded-md p-3 mb-3 flex flex-col gap-1">
                       <span className="text-red-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
@@ -269,10 +269,10 @@ export default function PostCard({ post, commentCount = 0, reactionCount = 0, re
 
                 {/* RIGHT — Comments, scrollable */}
                 <div className="flex flex-col overflow-hidden min-w-0 min-h-0">
-                  <div className="px-4 pt-3 pb-2 border-b border-border shrink-0">
+                  <div className="px-5 sm:px-6 pt-5 pb-3 border-b border-border shrink-0">
                     <span className="text-[10px] font-display uppercase tracking-wider text-muted-foreground">Comments</span>
                   </div>
-                  <div className="flex-1 overflow-y-auto px-4 py-3">
+                  <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4">
                     <CommentSection postId={post.id} />
                   </div>
                 </div>
